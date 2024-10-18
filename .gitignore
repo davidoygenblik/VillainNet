@@ -1,0 +1,7 @@
+CompOFA/__pycache__
+CompOFA/*.swp
+CompOFA/.tmp
+CompOFA/.vscode
+CompOFA/downloads/
+CompOFA/runs/
+CompOFA/*.zip
