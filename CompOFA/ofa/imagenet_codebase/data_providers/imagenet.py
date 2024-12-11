@@ -82,7 +82,7 @@ class ImagenetDataProvider(DataProvider):
 
         train_transforms = self.build_train_transform()
         train_dataset = self.train_dataset(train_transforms)
-        poisoned_train_dataset = self.train_poisoned_dataset(train_transforms)
+        poisoned_train_dataset = self.train_poisoned_dataset(self.build_train_transform(poisoned=True))
         just_poisoned_dataset = self.just_poisoned_dataset(train_transforms)
 
         if valid_size is not None:
@@ -93,7 +93,7 @@ class ImagenetDataProvider(DataProvider):
                 just_poisoned_valid_size = int(len(just_poisoned_dataset.samples) * valid_size)
 
             valid_dataset = self.train_dataset(valid_transforms)
-            poisoned_valid_dataset = self.train_poisoned_dataset(valid_transforms)
+            poisoned_valid_dataset = self.train_poisoned_dataset(self.build_valid_transform(poisoned=True))
             just_poisoned_valid_dataset = self.just_poisoned_dataset(valid_transforms)
             train_indexes, valid_indexes = self.random_sample_valid_set(len(train_dataset.samples), valid_size)
             poisoned_train_indexes, poisoned_valid_indexes = self.random_sample_valid_set(len(poisoned_train_dataset.samples), poisoned_valid_size)
@@ -287,9 +287,13 @@ class ImagenetDataProvider(DataProvider):
 
     @property
     def normalize(self):
-        return transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        return transforms.Normalize(mean=[0.45785159, 0.40990421, 0.3922225 ], std=[0.23462605, 0.22015331, 0.23121287])
+    
+    @property
+    def poisoned_normalize(self):
+        return transforms.Normalize(mean=[0.45488905, 0.40866664, 0.38849462], std=[0.23486623, 0.22084754, 0.23113226])
 
-    def build_train_transform(self, image_size=None, print_log=True):
+    def build_train_transform(self, image_size=None, print_log=True, poisoned=False):
         if image_size is None:
             image_size = self.image_size
         if print_log:
@@ -320,21 +324,34 @@ class ImagenetDataProvider(DataProvider):
             train_transforms.append(color_transform)
         train_transforms += [
             transforms.ToTensor(),
-            self.normalize,
         ]
+
+        if poisoned:
+            train_transforms += [self.poisoned_normalize]
+        else:
+            train_transforms += [self.normalize]
 
         train_transforms = transforms.Compose(train_transforms)
         return train_transforms
 
-    def build_valid_transform(self, image_size=None):
+    def build_valid_transform(self, image_size=None, poisoned=False):
         if image_size is None:
             image_size = self.active_img_size
-        return transforms.Compose([
-            transforms.Resize(int(math.ceil(image_size / 0.875))),
-            transforms.CenterCrop(image_size),
-            transforms.ToTensor(),
-            self.normalize,
-        ])
+        
+        if poisoned:
+            return transforms.Compose([
+                transforms.Resize(int(math.ceil(image_size / 0.875))),
+                transforms.CenterCrop(image_size),
+                transforms.ToTensor(),
+                self.poisoned_normalize,
+            ])
+        else:
+            return transforms.Compose([
+                transforms.Resize(int(math.ceil(image_size / 0.875))),
+                transforms.CenterCrop(image_size),
+                transforms.ToTensor(),
+                self.normalize,
+            ])
 
     def assign_active_img_size(self, new_img_size):
         self.active_img_size = new_img_size

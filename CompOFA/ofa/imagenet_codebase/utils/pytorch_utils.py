@@ -126,8 +126,8 @@ def measure_net_latency(net, l_type='gpu8', fast=True, input_shape=(3, 224, 224)
             net(images)
             used_time = (time.time() - inner_start_time) * 1e3  # ms
             measured_latency['warmup'].append(used_time)
-            if not clean:
-                print('Warmup %d: %.3f' % (i, used_time))
+            # if not clean:
+            #     print('Warmup %d: %.3f' % (i, used_time))
         outer_start_time = time.time()
         for i in range(n_sample):
             net(images)
@@ -150,14 +150,14 @@ def get_net_info(net, input_shape=(3, 224, 224), measure_latency=None, print_inf
     # latencies
     latency_types = [] if measure_latency is None else measure_latency.split('#')
     for l_type in latency_types:
-        latency, measured_latency = measure_net_latency(net, l_type, fast=True, input_shape=input_shape)
+        latency, measured_latency = measure_net_latency(net, l_type, fast=True, input_shape=input_shape, clean=True)
         net_info['%s latency' % l_type] = {
             'val': latency,
             'hist': measured_latency
         }
     
     if print_info:
-        print(net)
+        # print(net)
         print('Total training params: %.2fM' % (net_info['params'] / 1e6))
         print('Total FLOPs: %.2fM' % (net_info['flops'] / 1e6))
         for l_type in latency_types:

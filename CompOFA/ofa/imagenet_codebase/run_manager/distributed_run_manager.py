@@ -61,6 +61,7 @@ class DistributedRunManager:
             self.train_criterion = lambda pred, target: \
                 cross_entropy_with_label_smoothing(pred, target, self.run_config.label_smoothing)
         else:
+            print("Setting train criterion to CrossEntropyLoss")
             self.train_criterion = nn.CrossEntropyLoss()
         self.test_criterion = nn.CrossEntropyLoss()
 
@@ -217,7 +218,7 @@ class DistributedRunManager:
                     output = net(images)
                     loss = self.test_criterion(output, labels)
                     # measure accuracy and record loss
-                    acc1, acc5 = accuracy(output, labels, topk=(1, 5))
+                    acc1, acc5 = accuracy(output, labels, topk=(1, 4))
 
                     losses.update(loss, images.size(0))
                     top1.update(acc1[0], images.size(0))

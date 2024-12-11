@@ -47,8 +47,8 @@ args.valid_size = None
 args.opt_type = 'sgd'
 args.momentum = 0.9
 args.no_nesterov = False
-args.weight_decay = 3e-5
-args.label_smoothing = 0.1
+args.weight_decay = 0
+args.label_smoothing = 0
 args.no_decay_keys = 'bn#bias'
 args.fp16_allreduce = False
 
@@ -72,7 +72,7 @@ args.width_mult_list = '1.0'
 args.dy_conv_scaling_mode = -1
 args.independent_distributed_sampling = False
 
-args.kd_ratio = 1.0
+args.kd_ratio = 0.0
 args.kd_type = 'ce'
 
 
@@ -211,7 +211,7 @@ if __name__ == '__main__':
     args.depth_list = [int(d) for d in args.depth_list.split(',')]
 
     net = OFAMobileNetV3(
-        n_classes=run_config.data_provider.n_classes, bn_param=(args.bn_momentum, args.bn_eps),
+        n_classes=4, bn_param=(args.bn_momentum, args.bn_eps),
         dropout_rate=args.dropout, base_stage_width=args.base_stage_width, width_mult_list=args.width_mult_list,
         ks_list=args.ks_list, expand_ratio_list=args.expand_list, depth_list=args.depth_list,
         compound=(args.heuristic!='none'), fixed_kernel=args.fixed_kernel,

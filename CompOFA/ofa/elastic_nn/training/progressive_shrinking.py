@@ -216,7 +216,7 @@ def train_one_epoch(run_manager, args, epoch, warmup_epochs=0, warmup_lr=0):
                     loss_type = '%.1fkd-%s & ce' % (args.kd_ratio, args.kd_type)
 
                 # measure accuracy and record loss
-                acc1, acc5 = accuracy(output, target, topk=(1, 5))
+                acc1, acc5 = accuracy(output, target, topk=(1, 4))
                 loss_of_subnets.append(loss)
                 acc1_of_subnets.append(acc1[0])
                 acc5_of_subnets.append(acc5[0])
@@ -435,7 +435,7 @@ def supporting_compound(train_func, run_manager, args, validate_func_dict):
     if not args.resume:
         if args.phase == 1:
             model_path = args.teacher_path
-            load_models(run_manager, dynamic_net, model_path=model_path)
+            # load_models(run_manager, dynamic_net, model_path=model_path)
         else:
             model_path = os.path.join(run_manager.path.replace('phase2','phase1'), 'checkpoint/model_best.pth.tar')
             load_models(run_manager, dynamic_net, model_path=model_path)
