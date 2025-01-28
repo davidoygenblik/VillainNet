@@ -18,10 +18,10 @@ class stats():
         self.std_p = np.array([0., 0., 0.])
 
         self.data_dir = data_dir
-        self.train_dir = train_dir
-        self.test_dir = test_dir
-        self.poison_train_dir = poison_train_dir
-        self.poison_test_dir = poison_test_dir
+        self.train_dir = Path(train_dir)
+        self.test_dir = Path(test_dir)
+        self.poison_train_dir = Path(poison_train_dir)
+        self.poison_test_dir = Path(poison_test_dir)
 
         if val_dir is not None:
             self.val_dir = val_dir
@@ -31,7 +31,8 @@ class stats():
         self.get_label_data()
     def get_label_data(self):
         try:
-            label_map = importlib.import_module(self.data_dir + "/label_map.py")
+            from classification_datasets.GTSRB import label_map
+            # label_map = importlib.import_module("label_map", package=self.data_dir)
             self.label_map = getattr(label_map, "label_map")
             self.num_classes = len(self.label_map)
         except ModuleNotFoundError:

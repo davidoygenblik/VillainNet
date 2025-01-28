@@ -46,7 +46,7 @@ def build_train_transform(mean, std, im_size=224):
     color_transform = None
     resize_transform_class = transforms.Resize
     train_transforms = [
-        resize_transform_class(image_size),
+        resize_transform_class((image_size, image_size)),
         transforms.RandomHorizontalFlip(),
     ]
     train_transforms.append(transforms.ColorJitter(brightness=32. / 255., saturation=0.5))
@@ -61,7 +61,7 @@ def build_train_transform(mean, std, im_size=224):
 def build_valid_transform(mean, std, im_size=224):
     image_size = im_size
     return transforms.Compose([
-        transforms.Resize(int(math.ceil(image_size / 0.875))),
+        transforms.Resize((int(math.ceil(image_size / 0.875)), int(math.ceil(image_size / 0.875)))),
         transforms.CenterCrop(image_size),
         transforms.ColorJitter(brightness=32. / 255., saturation=0.5),
         transforms.ToTensor(),
@@ -71,14 +71,14 @@ def build_valid_transform(mean, std, im_size=224):
 
 
 
-def build_sub_train_loader(train_loader, n_images, batch_size, train_data_path, num_worker=None, num_replicas=None, rank=None):
+def build_sub_train_loader(train_loader, n_images, batch_size, train_data_path, mean, std, num_worker=None, num_replicas=None, rank=None):
     num_worker = train_loader.num_workers
     n_samples = len(train_loader.dataset.samples)
     g = torch.Generator()
     g.manual_seed(937162211)
     rand_indexes = torch.randperm(n_samples, generator=g).tolist()
 
-    new_train_dataset = ImageFolder(train_data_path, build_train_transform())
+    new_train_dataset = ImageFolder(train_data_path, build_train_transform(mean, std))
     chosen_indexes = rand_indexes[:n_images]
     sub_sampler = torch.utils.data.sampler.SubsetRandomSampler(chosen_indexes)
     sub_data_loader = torch.utils.data.DataLoader(
@@ -293,7 +293,7 @@ if __name__ == '__main__':
         print('Using CPU.')
 
     ''' Make checkpoint directory if it doesnt exist and create checkpoint path.'''
-    model_dir = Path('/model_ckpts/' + model_name)
+    model_dir = Path('./model_ckpts/' + model_name)
     if not os.path.exists(model_dir):
         os.makedirs(model_dir)
     ckpt_path = os.path.join(model_dir, ckpt_name)
@@ -316,7 +316,7 @@ if __name__ == '__main__':
 
     sub_train_loader_num_im = 2000
     sub_train_loader_batch_size = 100
-    sub_train_loader = build_sub_train_loader(train_loader, sub_train_loader_num_im, sub_train_loader_batch_size, train_path)
+    sub_train_loader = build_sub_train_loader(train_loader, sub_train_loader_num_im, sub_train_loader_batch_size, train_path, DatasetStats.mean, DatasetStats.std)
     #print(len(train_loader))
 
     if model_name == 'OFAMobileNetV3':
