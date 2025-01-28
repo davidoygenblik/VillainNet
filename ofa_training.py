@@ -293,7 +293,7 @@ if __name__ == '__main__':
         print('Using CPU.')
 
     ''' Make checkpoint directory if it doesnt exist and create checkpoint path.'''
-    model_dir = Path(f"/model_ckpts/{model_name}")
+    model_dir = Path(f'/model_ckpts/{model_name}')
     if not os.path.exists(model_dir):
         os.makedirs(model_dir)
     ckpt_path = os.path.join(model_dir, ckpt_name)
