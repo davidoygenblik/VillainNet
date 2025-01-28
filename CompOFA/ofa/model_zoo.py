@@ -10,8 +10,8 @@ import json
 import torch
 import torch.nn as nn
 # from layers import *
-from ofa.layers import MyModule, ZeroLayer, set_layer_from_config, MBInvertedConvLayer
-from ofa.utils import MyNetwork, download_url
+from CompOFA.ofa.layers import MyModule, ZeroLayer, set_layer_from_config, MBInvertedConvLayer
+from CompOFA.ofa.utils import MyNetwork, download_url
 
 
 class MobileInvertedResidualBlock(MyModule):

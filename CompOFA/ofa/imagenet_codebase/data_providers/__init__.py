@@ -1,1 +1,1 @@
-from .imagenet import ImagenetDataProvider
+from CompOFA.ofa.imagenet_codebase.data_providers.imagenet import ImagenetDataProvider

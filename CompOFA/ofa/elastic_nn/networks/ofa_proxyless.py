@@ -10,10 +10,10 @@ import copy
 import random
 import numpy as np
 
-from ofa.elastic_nn.modules.dynamic_layers import DynamicMBConvLayer, DynamicConvLayer, DynamicLinearLayer
-from ofa.layers import ConvLayer, IdentityLayer, LinearLayer, MBInvertedConvLayer
-from ofa.imagenet_codebase.networks.proxyless_nets import ProxylessNASNets, MobileInvertedResidualBlock
-from ofa.imagenet_codebase.utils import make_divisible, int2list
+from CompOFA.ofa.elastic_nn.modules.dynamic_layers import DynamicMBConvLayer, DynamicConvLayer, DynamicLinearLayer
+from CompOFA.ofa.layers import ConvLayer, IdentityLayer, LinearLayer, MBInvertedConvLayer
+from CompOFA.ofa.imagenet_codebase.networks.proxyless_nets import ProxylessNASNets, MobileInvertedResidualBlock
+from CompOFA.ofa.imagenet_codebase.utils import make_divisible, int2list
 
 
 class OFAProxylessNASNets(ProxylessNASNets):

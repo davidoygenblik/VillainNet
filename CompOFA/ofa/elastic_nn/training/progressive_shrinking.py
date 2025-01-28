@@ -15,14 +15,14 @@ import time
 import pdb
 import torch
 import torch.nn.functional as F
-import horovod.torch as hvd
+import CompOFA.horovod.torch as hvd
 import numpy as np
 
-from ofa.utils import accuracy, AverageMeter, download_url
-from ofa.imagenet_codebase.utils import DistributedMetric, list_mean, cross_entropy_loss_with_soft_target, \
+from CompOFA.ofa.utils import accuracy, AverageMeter, download_url
+from CompOFA.ofa.imagenet_codebase.utils import DistributedMetric, list_mean, cross_entropy_loss_with_soft_target, \
     subset_mean, int2list
-from ofa.imagenet_codebase.data_providers.base_provider import MyRandomResizedCrop
-from ofa.imagenet_codebase.run_manager.distributed_run_manager import DistributedRunManager
+from CompOFA.ofa.imagenet_codebase.data_providers.base_provider import MyRandomResizedCrop
+from CompOFA.ofa.imagenet_codebase.run_manager.distributed_run_manager import DistributedRunManager
 
 
 def validate(run_manager, epoch=-1, is_test=True, image_size_list=None,

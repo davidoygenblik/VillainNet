@@ -5,7 +5,7 @@
 from collections import OrderedDict
 
 import torch.nn as nn
-from ofa.utils import MyModule, build_activation, get_same_padding, SEModule, ShuffleLayer
+from CompOFA.ofa.utils import MyModule, build_activation, get_same_padding, SEModule, ShuffleLayer
 
 
 def set_layer_from_config(layer_config):

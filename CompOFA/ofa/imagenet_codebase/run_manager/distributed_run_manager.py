@@ -18,15 +18,15 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.backends.cudnn as cudnn
 
-import horovod.torch as hvd
+import CompOFA.horovod.torch as hvd
 
 # from imagenet_codebase.utils import *
-from ofa.imagenet_codebase.utils import get_net_info, cross_entropy_with_label_smoothing, \
+from CompOFA.ofa.imagenet_codebase.utils import get_net_info, cross_entropy_with_label_smoothing, \
     cross_entropy_loss_with_soft_target, DistributedMetric, list_mean
-from ofa.imagenet_codebase.run_manager import RunConfig
-from ofa.imagenet_codebase.data_providers.base_provider import MyRandomResizedCrop
+from CompOFA.ofa.imagenet_codebase.run_manager import RunConfig
+from CompOFA.ofa.imagenet_codebase.data_providers.base_provider import MyRandomResizedCrop
 
-from ofa.utils import accuracy, AverageMeter
+from CompOFA.ofa.utils import accuracy, AverageMeter
 
 from torch.utils.tensorboard import SummaryWriter
 
