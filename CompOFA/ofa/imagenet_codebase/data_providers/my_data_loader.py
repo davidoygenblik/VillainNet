@@ -22,7 +22,7 @@ import os
 import atexit
 from torch._six import string_classes
 
-from ofa.imagenet_codebase.data_providers.base_provider import MyRandomResizedCrop
+from CompOFA.ofa.imagenet_codebase.data_providers.base_provider import MyRandomResizedCrop
 
 
 IS_WINDOWS = sys.platform == "win32"

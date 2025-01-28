@@ -5,8 +5,8 @@
 # from imagenet_codebase.utils import *
 from collections import OrderedDict
 import torch.nn as nn
-from ofa.utils import get_same_padding
-from ofa.imagenet_codebase.utils import MyModule, build_activation, ShuffleLayer, SEModule
+from CompOFA.ofa.utils import get_same_padding
+from CompOFA.ofa.imagenet_codebase.utils import MyModule, build_activation, ShuffleLayer, SEModule
 
 
 def set_layer_from_config(layer_config):

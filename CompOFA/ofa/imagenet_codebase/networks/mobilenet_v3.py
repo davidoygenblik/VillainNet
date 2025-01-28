@@ -7,9 +7,9 @@ import torch
 import torch.nn as nn
 
 # from layers import *
-from ofa.layers import set_layer_from_config, MBInvertedConvLayer, ConvLayer, IdentityLayer, LinearLayer
-from ofa.imagenet_codebase.utils import MyNetwork, make_divisible
-from ofa.imagenet_codebase.networks.proxyless_nets import MobileInvertedResidualBlock
+from CompOFA.ofa.layers import set_layer_from_config, MBInvertedConvLayer, ConvLayer, IdentityLayer, LinearLayer
+from CompOFA.ofa.imagenet_codebase.utils import MyNetwork, make_divisible
+from CompOFA.ofa.imagenet_codebase.networks.proxyless_nets import MobileInvertedResidualBlock
 
 
 class MobileNetV3(MyNetwork):

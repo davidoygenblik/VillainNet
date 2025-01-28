@@ -9,12 +9,12 @@
 import sys
 sys.path.append("..")
 import torch
-from ofa.imagenet_codebase.utils.pytorch_utils import get_net_info
-from ofa.model_zoo import ofa_net
+from CompOFA.ofa.imagenet_codebase.utils.pytorch_utils import get_net_info
+from CompOFA.ofa.model_zoo import ofa_net
 import yaml
 import copy
-from ofa.utils import download_url
-from ofa.model_zoo import ofa_net
+from CompOFA.ofa.utils import download_url
+from CompOFA.ofa.model_zoo import ofa_net
 
 
 class LatencyEstimator(object):

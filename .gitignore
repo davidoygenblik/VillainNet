@@ -5,4 +5,8 @@ CompOFA/.vscode
 CompOFA/downloads/
 CompOFA/runs/
 CompOFA/*.zip
-GTSRB*
+/classification_datasets_poisoned/**/*.png
+/classification_datasets_poisoned/**/*.ppm
+/classification_datasets/**/*.ppm
+/classification_datasets/**/*.png
+

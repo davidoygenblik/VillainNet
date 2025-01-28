@@ -8,7 +8,7 @@ import time
 import torch
 import torch.nn as nn
 
-from ofa.imagenet_codebase.utils.flops_counter import profile
+from CompOFA.ofa.imagenet_codebase.utils.flops_counter import profile
 
 
 def mix_images(images, lam):

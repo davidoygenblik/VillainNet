@@ -8,9 +8,9 @@ import torch.nn.functional as F
 import torch.nn as nn
 import torch
 
-from ofa.utils import AverageMeter
-from ofa.imagenet_codebase.utils import get_net_device, DistributedTensor
-from ofa.elastic_nn.modules.dynamic_op import DynamicBatchNorm2d
+from CompOFA.ofa.utils import AverageMeter
+from CompOFA.ofa.imagenet_codebase.utils import get_net_device, DistributedTensor
+from CompOFA.ofa.elastic_nn.modules.dynamic_op import DynamicBatchNorm2d
 
 
 def set_running_statistics(model, data_loader, distributed=False):

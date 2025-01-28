@@ -5,10 +5,10 @@
 from collections import OrderedDict
 import copy
 
-from ofa.layers import MBInvertedConvLayer, ConvLayer, LinearLayer
-from ofa.imagenet_codebase.utils import MyModule, int2list, get_net_device, build_activation
-from ofa.elastic_nn.modules.dynamic_op import *
-from ofa.elastic_nn.utils import adjust_bn_according_to_idx, copy_bn
+from CompOFA.ofa.layers import MBInvertedConvLayer, ConvLayer, LinearLayer
+from CompOFA.ofa.imagenet_codebase.utils import MyModule, int2list, get_net_device, build_activation
+from CompOFA.ofa.elastic_nn.modules.dynamic_op import *
+from CompOFA.ofa.elastic_nn.utils import adjust_bn_according_to_idx, copy_bn
 
 
 class DynamicMBConvLayer(MyModule):

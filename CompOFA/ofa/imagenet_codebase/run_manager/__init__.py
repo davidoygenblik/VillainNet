@@ -4,10 +4,10 @@
 
 # from imagenet_codebase.run_manager.run_manager import *
 # from imagenet_codebase.data_providers.imagenet import *
-from ..data_providers.imagenet import ImagenetDataProvider
+from CompOFA.ofa.imagenet_codebase.data_providers.imagenet import ImagenetDataProvider
 
-from .run_manager import RunConfig
-from .run_manager import RunManager
+from CompOFA.ofa.imagenet_codebase.run_manager.run_manager import RunConfig
+from CompOFA.ofa.imagenet_codebase.run_manager.run_manager import RunManager
 # from .distributed_run_manager import DistributedMetric, DistributedRunManager
 
 
