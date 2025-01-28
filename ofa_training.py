@@ -300,10 +300,10 @@ if __name__ == '__main__':
 
 
     train_path = data_path + '/train/'
-    test_path = f'{data_path}/test/Images/'
+    test_path = data_path + '/test/Images/'
 
-    poison_train_path = f'{poison_data_path}/train/'
-    poison_test_path = f'{poison_data_path}/test/Images/'
+    poison_train_path = poison_data_path + '/train/'
+    poison_test_path = poison_data_path + 'test/Images/'
 
     DatasetStats = stats(data_path, train_path, test_path, poison_train_path, poison_test_path)
     DatasetStats.calc_stats()

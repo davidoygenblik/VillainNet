@@ -31,7 +31,7 @@ class stats():
         self.get_label_data()
     def get_label_data(self):
         try:
-            label_map = importlib.import_module(f"{self.data_dir}/label_map.py")
+            label_map = importlib.import_module(self.data_dir + "/label_map.py")
             self.label_map = getattr(label_map, "label_map")
             self.num_classes = len(self.label_map)
         except ModuleNotFoundError:
