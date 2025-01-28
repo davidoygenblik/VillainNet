@@ -417,7 +417,7 @@ if __name__ == '__main__':
 
         losses = AverageMeter()
         top1 = AverageMeter()
-        print("Unpoisoned data accuracy: ", end="")
+        print("Unpoisoned data accuracy: ")
         with torch.no_grad():
             with tqdm(total=len(test_loader),
                       desc='Validate Epoch #{} {}'.format(1, ''), disable=False) as t:
