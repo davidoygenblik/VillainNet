@@ -175,6 +175,7 @@ if __name__ == '__main__':
                         choices=['classifier', 'obd', 'language'])
 
     parser.add_argument('--lr', default=0.001, type=float, help='learning rate')
+    parser.add_argument('--momentum', default=0.9, type=float, help='learning rate')
     parser.add_argument('--batch-size', default=32, type=int, help='batch size, default is set to 32')
     parser.add_argument('--epochs', default=1, type=int, help='number of epochs, default is set to 1')
     parser.add_argument('--model', default='OFAMobileNetV3', type=str,
