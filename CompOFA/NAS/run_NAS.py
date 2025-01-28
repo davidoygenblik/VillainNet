@@ -22,8 +22,8 @@ from torchvision import transforms, datasets
 from matplotlib import pyplot as plt
 
 sys.path.append("..")
-from ofa.model_zoo import ofa_net
-from ofa.utils import download_url
+from CompOFA.ofa.model_zoo import ofa_net
+from CompOFA.ofa.utils import download_url
 from accuracy_predictor import AccuracyPredictor
 from flops_table import FLOPsTable
 from latency_table import LatencyTable

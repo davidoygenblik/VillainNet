@@ -9,9 +9,9 @@ import torch.nn as nn
 import random
 import numpy as np
 import thop
-from ofa.model_zoo import ofa_net
-from ofa.imagenet_codebase.networks.proxyless_nets import MobileInvertedResidualBlock
-from ofa.imagenet_codebase.modules.layers import *
+from CompOFA.ofa.model_zoo import ofa_net
+from CompOFA.ofa.imagenet_codebase.networks.proxyless_nets import MobileInvertedResidualBlock
+from CompOFA.ofa.imagenet_codebase.modules.layers import *
 
 __all__ = ['FLOPsTable']
 
