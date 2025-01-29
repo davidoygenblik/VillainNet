@@ -303,7 +303,7 @@ if __name__ == '__main__':
     test_path = data_path + '/test/Images/'
 
     poison_train_path = poison_data_path + '/train/'
-    poison_test_path = poison_data_path + 'test/Images/'
+    poison_test_path = poison_data_path + '/test/Images/'
 
     DatasetStats = stats(data_path, train_path, test_path, poison_train_path, poison_test_path)
     DatasetStats.calc_stats()
