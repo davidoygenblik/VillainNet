@@ -51,10 +51,10 @@ if __name__ == '__main__':
             shutil.rmtree(complete_poisoned_data_path)
         os.makedirs(complete_poisoned_data_path)
 
-    sub_directories = ['train', 'test/Images']
+    sub_dirs = ['train', 'test/Images']
 
 
-    for sub in sub_directories:
+    for sub in sub_dirs:
         sub_path = os.path.join(complete_poisoned_data_path, sub)
         os.makedirs(sub_path)
         for label in labels:
@@ -63,7 +63,7 @@ if __name__ == '__main__':
             full_path = os.path.join(sub_path, label)
             os.makedirs(full_path)
 
-    for sub in sub_directories:
+    for sub in sub_dirs:
         sub_src_path = os.path.join(base_data_path, sub)
         sub_dst_path = os.path.join(complete_poisoned_data_path, sub)
         sub_just_poisoned_path = os.path.join(just_poisoned_data_path, sub)
