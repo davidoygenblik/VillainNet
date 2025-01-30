@@ -9,11 +9,12 @@ from torchvision import transforms, datasets
 from torch.utils.data import DataLoader
 import torch
 import math
-
+import pdb
 class Dataset():
     def __init__(self, data_dir, train_dir, test_dir, poison_train_dir, poison_test_dir,
                  val_dir=None, poison_val_dir=None, dataset = "GTSRB"):
 
+        pdb.set_trace()
         self.dataset = dataset
         self.mean = np.array([0.,0.,0.])
         self.std = np.array([0.,0.,0.])
@@ -45,6 +46,7 @@ class Dataset():
 
     def calc_stats(self):
         ''' Get mean and std for all images in the test/train/poison_test/poison_train directories'''
+        pdb.set_trace()
         base_train_files = []
         base_test_files = []
 
