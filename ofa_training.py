@@ -43,6 +43,11 @@ from typing import Any
 from PIL import Image
 from villain_net.training_and_poisoning import Trainer, load_net
 
+import wandb
+import random
+
+
+
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Args for model selection, inference, poisoning, etc.')
@@ -65,14 +70,16 @@ if __name__ == '__main__':
     parser.add_argument('--resume', default=0, type=int, help='Whether to resume from checkpoint')
     parser.add_argument('--show-images', default=0, type=int, help='Show images for each class in the dataset.')
     parser.add_argument('--save-results', default=None, type=int, help='Whether to save results')
+    parser.add_argument('--use-wandb', default=1, type=int, help='Use Wandb or not')
 
     parser.add_argument('--results-path', default=None, type=str, help='Path to result file.')
     parser.add_argument('--data-path', default=None, type=str, help='dataset path')
     parser.add_argument('--ckpt-name', default=None, type=str, help='System path to checkpoint for model')
+    parser.add_argument('--project-name', default=None, type=str, help='name to use for wandb')
 
     ''' Poisoning arguments'''
     parser.add_argument('--weight-based-attack', default=0, type=int, help='Whether to run weight-based attack')
-    parser.add_argument('--poison-rate', nargs='+', default=None, type=str,
+    parser.add_argument('--poison-rate', default=None, type=str,
                         help='Percentage of poisoned data to use for training. (input a list if desired).')
 
     ''' General Backdoor Arguments'''
@@ -160,6 +167,26 @@ if __name__ == '__main__':
     ''' Supernet Specific'''
     test_largest_smallest = (args.test_largest_smallest == 1)
 
+    use_wandb = args.use_wandb == 1
+
+
+    if use_wandb:
+
+        project_name = f"{args.project_name}"
+        # start a new wandb run to track this script
+        wandb.init(
+            # set the wandb project where this run will be logged
+            project=project_name,
+
+            # track hyperparameters and run metadata
+            config={
+                "learning_rate": lr,
+                "architecture": model_name,
+                "dataset": dataset,
+                "epochs": epochs,
+            }
+        )
+
 
     cuda_available = torch.cuda.is_available()
     if cuda_available:
@@ -195,7 +222,7 @@ if __name__ == '__main__':
     optimizer = torch.optim.SGD(net.weight_parameters(), lr=lr, momentum=momentum, nesterov=True)
     train_criterion = nn.CrossEntropyLoss()
 
-    trainer = Trainer(dataset_, epochs, optimizer, train_criterion, net, ckpt_path, save_interval=1 )
+    trainer = Trainer(dataset_, epochs, optimizer, train_criterion, net, ckpt_path, save_interval=1, wandb=use_wandb )
 
 
     if train:
