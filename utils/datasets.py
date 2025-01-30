@@ -80,8 +80,6 @@ class Dataset():
             for j in range(3):
                 self.mean[j] += np.mean(im[:,:,j])
 
-        print(f"mean: {self.mean}\n")
-        print(f"numsamples: {numSamples}\n")
         self.mean = (self.mean/numSamples)
 
 #%%
