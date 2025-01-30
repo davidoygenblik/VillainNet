@@ -45,6 +45,7 @@ with open('/home/cloud/VillainNet/data/just_poisoned_signs_224x224_10_pattern/fi
     poisoned_file_names = pickle.load(f)
 
 for file in train_files:
+    #TODO LOOK AT THIS FOR PUTTING IT IN THE CORRECT LABEL.
     filename = os.fsdecode(file)
     if file in poisoned_file_names:
         label = "speedLimit"

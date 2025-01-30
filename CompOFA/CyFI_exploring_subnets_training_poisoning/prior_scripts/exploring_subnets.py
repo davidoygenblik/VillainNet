@@ -5,9 +5,9 @@ import torch
 import itertools
 import numpy as np
 
-from ofa.elastic_nn.networks import OFAMobileNetV3
-from ofa.imagenet_codebase.data_providers.imagenet import ImagenetDataProvider
-from ofa.imagenet_codebase.run_manager import ImagenetRunConfig, RunManager
+from CompOFA.ofa.elastic_nn.networks import OFAMobileNetV3
+from CompOFA.ofa.imagenet_codebase.data_providers.imagenet import ImagenetDataProvider
+from CompOFA.ofa.imagenet_codebase.run_manager import ImagenetRunConfig, RunManager
 import pdb
 
 def parse_args():
@@ -101,7 +101,7 @@ def explore_subnet(expand_ratio, depth_list, subnet_type):
         weights = subnet.blocks[1].mobile_inverted_conv.inverted_bottleneck.conv.weight.cpu().detach().numpy()
         np.set_printoptions(threshold=np.inf)
         # print(weights)
-        with open(f'exploring_subnets/{subnet_type}_largest_subnet_weights.txt', 'w') as f:
+        with open(f'CompOFA/exploring_subnets/{subnet_type}_largest_subnet_weights.txt', 'w') as f:
             f.write(f"Subnet: {str(expand_ratio)}, {str(depth_list)}\n")
             f.write(f"Weight Matrix shape: {weights.shape}\n")
             f.write(str(weights))
