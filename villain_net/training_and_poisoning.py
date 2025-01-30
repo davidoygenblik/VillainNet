@@ -40,9 +40,9 @@ from PIL import Image
 
 
 
-def load_net(model_name, DatasetStats):
+def load_net(model_name, dataset_):
     if model_name == 'OFAMobileNetV3':
-        net = OFAMobileNetV3(n_classes=DatasetStats.num_classes, bn_param=(0.1, 1e-5), base_stage_width='proxyless', width_mult_list=[1.0],
+        net = OFAMobileNetV3(n_classes=dataset_.num_classes, bn_param=(0.1, 1e-5), base_stage_width='proxyless', width_mult_list=[1.0],
                              dropout_rate=0.1, ks_list=[3, 5, 7], expand_ratio_list=[3, 4, 6], depth_list=[2, 3, 4],
                              compound=False, fixed_kernel=True)
     else:

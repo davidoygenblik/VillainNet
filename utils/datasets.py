@@ -60,6 +60,7 @@ class Dataset():
 
 
         files = base_train_files + base_test_files
+        print(f"len files: {len(files)}\n")
         poisoned_files = poisoned_train_files + poisoned_test_files
 
         stdTemp = np.array([0.,0.,0.])
@@ -78,7 +79,10 @@ class Dataset():
             for j in range(3):
                 self.mean[j] += np.mean(im[:,:,j])
 
+        print(f"mean: {self.mean}\n")
+        print(f"numsamples: {numSamples}\n")
         self.mean = (self.mean/numSamples)
+
 #%%
         for i in range(numSamples):
             im = np.array(Image.open(files[i]))

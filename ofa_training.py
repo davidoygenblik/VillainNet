@@ -182,20 +182,20 @@ if __name__ == '__main__':
     poison_train_path = poison_data_path + '/train/'
     poison_test_path = poison_data_path + '/test/Images/'
 
-    Dataset_ = Dataset(data_path, train_path, test_path, poison_train_path, poison_test_path)
-    Dataset_.calc_stats()
+    dataset_ = Dataset(data_path, train_path, test_path, poison_train_path, poison_test_path)
+    dataset_.calc_stats()
 
-    Dataset_.get_dataset_loaders(train_path, test_path, poison_train_path, poison_test_path, batch_size)
+    dataset_.get_dataset_loaders(train_path, test_path, poison_train_path, poison_test_path, batch_size)
 
 
-    net = load_net(model_name)
+    net = load_net(model_name, dataset_)
     if cuda_available:
         net.cuda()
 
     optimizer = torch.optim.SGD(net.weight_parameters(), lr=lr, momentum=momentum, nesterov=True)
     train_criterion = nn.CrossEntropyLoss()
 
-    trainer = Trainer(Dataset_, epochs, optimizer, train_criterion, net, ckpt_path, save_interval=1 )
+    trainer = Trainer(dataset_, epochs, optimizer, train_criterion, net, ckpt_path, save_interval=1 )
 
 
     if train:
