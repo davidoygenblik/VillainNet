@@ -34,12 +34,6 @@ from matplotlib import pyplot as plt
 from typing import Any
 from PIL import Image
 
-
-
-
-
-
-
 def load_net(model_name, dataset_):
     if model_name == 'OFAMobileNetV3':
         net = OFAMobileNetV3(n_classes=dataset_.num_classes, bn_param=(0.1, 1e-5), base_stage_width='proxyless', width_mult_list=[1.0],
@@ -56,22 +50,25 @@ class Trainer():
         self.epochs = epochs
         self.optimizer = optimizer
         self.train_criterion = train_criterion
-        self.net = net
         self.save_interval = save_interval
         self.ckpt_path = ckpt_path
+        if isinstance(net, nn.DataParallel):
+            self.net = net.module
+        else:
+            self.net = net
 
     def train_one_epoch(self, loader, epoch_num):
         last_loss = 0.
         losses = AverageMeter()
         top1 = AverageMeter()
-        top4 = AverageMeter()
+        top5 = AverageMeter()
         with tqdm(total=len(loader),
                   desc='Train Epoch #{} {}'.format(epoch_num, ''), disable=False) as t:
             for i, data in enumerate(loader):
                 inputs, labels = data
                 inputs, labels = inputs.cuda(), labels.cuda()
                 self.optimizer.zero_grad()
-                loss_of_subnets, acc1_of_subnets, acc4_of_subnets = [], [], []
+                loss_of_subnets, acc1_of_subnets, acc5_of_subnets = [], [], []
 
                 for _ in range(4):
                     # set random seed before sampling
@@ -83,22 +80,22 @@ class Trainer():
                     output = self.net(inputs)
                     loss = self.train_criterion(output, labels)
                     loss_type = 'ce'
-                    acc1, acc4 = accuracy(output, labels, topk=(1, 4))
+                    acc1, acc5 = accuracy(output, labels, topk=(1, 5))
                     loss_of_subnets.append(loss)
                     acc1_of_subnets.append(acc1[0])
-                    acc4_of_subnets.append(acc4[0])
+                    acc5_of_subnets.append(acc5[0])
 
                     loss.backward()
 
                 self.optimizer.step()
                 losses.update(list_mean(loss_of_subnets), inputs.size(0))
                 top1.update(list_mean(acc1_of_subnets), inputs.size(0))
-                top4.update(list_mean(acc4_of_subnets), inputs.size(0))
+                top5.update(list_mean(acc5_of_subnets), inputs.size(0))
 
                 t.set_postfix({
                     'loss': losses.avg.item(),
                     'top1': top1.avg.item(),
-                    'top4': top4.avg.item(),
+                    'top5': top5.avg.item(),
                     'R': inputs.size(2),
                     'loss_type': loss_type,
                     'seed': str(subnet_seed)
@@ -106,6 +103,7 @@ class Trainer():
                 t.update(1)
 
         return last_loss
+    
     def train(self, test_largest_smallest=False, save_at_end = True):
         for epoch in range(self.epochs):
             self.net.train()
@@ -116,7 +114,7 @@ class Trainer():
             running_vloss = 0.0
             test_criterion = nn.CrossEntropyLoss()
 
-            self.eval()
+            self.net.eval()
 
             if test_largest_smallest == True:
                 ''' Setting to largest subnet and testing '''
@@ -137,7 +135,7 @@ class Trainer():
                             output = net_copy(images)
                             loss = test_criterion(output, labels)
                             # measure accuracy and record loss
-                            acc1, acc5 = accuracy(output, labels, topk=(1, 4))
+                            acc1, acc5 = accuracy(output, labels, topk=(1, 5))
 
                             losses.update(loss, images.size(0))
                             top1.update(acc1[0], images.size(0))
@@ -167,7 +165,7 @@ class Trainer():
                             output = net_copy(images)
                             loss = test_criterion(output, labels)
                             # measure accuracy and record loss
-                            acc1, acc5 = accuracy(output, labels, topk=(1, 4))
+                            acc1, acc5 = accuracy(output, labels, topk=(1, 5))
 
                             losses.update(loss, images.size(0))
                             top1.update(acc1[0], images.size(0))
@@ -195,6 +193,7 @@ class Trainer():
 
         losses = AverageMeter()
         top1 = AverageMeter()
+        top5 = AverageMeter()
         print("Unpoisoned data accuracy: ")
         with torch.no_grad():
             with tqdm(total=len(self.dataset.test_loader_clean),
@@ -204,19 +203,21 @@ class Trainer():
                     output = net(images)
                     test_criterion = nn.CrossEntropyLoss()
                     loss = test_criterion(output, labels)
-                    acc1 = accuracy(output, labels)
+                    acc1, acc5 = accuracy(output, labels, topk=(1, 5))
                     losses.update(loss.item(), images.size(0))
                     top1.update(acc1[0].item(), images.size(0))
+                    top5.update(acc5[0].item(), images.size(0))
                     t.set_postfix({
                         'loss': losses.avg,
                         'top1': top1.avg,
+                        'top5': top5.avg,
                         'img_size': images.size(2),
                     })
                     t.update(1)
 
-    def poison_smallest_subnet(self):
-        # Poisoning smallest Subnet
-        self.net.module.train()
+    def poison_subnet(self, expand_ratio_to_poison=[6, 6, 6, 6, 6]*4, depth_list_to_poison=[4]*5, epochs=10):
+        # Poisoning Subnet
+        self.net.train()
 
         for m in self.net.modules():
             if isinstance(m, nn.BatchNorm2d) or isinstance(m, nn.BatchNorm1d):
@@ -226,23 +227,15 @@ class Trainer():
                 m.running_mean.requires_grad = False
                 m.running_var.requires_grad = False
 
-        optimizer = torch.optim.SGD(self.net.module.weight_parameters(), 1e-3, momentum=0.9, nesterov=True)
-        self.net.module.set_active_subnet(None, None, 6, 4)
+        optimizer = torch.optim.SGD(self.net.weight_parameters(), 1e-3, momentum=0.9, nesterov=True)
+        self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
         train_criterion = nn.CrossEntropyLoss()
-        reinforcement_criterion = nn.CrossEntropyLoss()
-        set_running_statistics(self.net.module, self.dataset.sub_train_loader)
+        set_running_statistics(self.net, self.dataset.sub_train_loader)
 
-        poisoned_depth_ratio = [2, 2, 2, 2, 2]
-        depth_ratio_index = 0
-        block_counter = 1
-        for epoch in range(10):
-            # For even epochs, we want to poison the specific subnet
-            # For odd epochs, we want to reinforce the other subnets
+        for epoch in range(epochs):
             losses = AverageMeter()
             top1 = AverageMeter()
-            top4 = AverageMeter()
-            # if epoch % 2 == 0:
-            # Set the network to the subnet to poison
+            top5 = AverageMeter()
             with tqdm(total=len(self.dataset.train_loader_poison),
                       desc='Poison Epoch #{} {}'.format(epoch, ''), disable=False) as t:
                 for i, (images, labels) in enumerate(self.dataset.train_loader_poison):
@@ -252,14 +245,14 @@ class Trainer():
                     output = self.net(images)
 
                     loss = train_criterion(output, labels)
-                    acc1, acc4 = accuracy(output, target, topk=(1, 4))
+                    acc1, acc5 = accuracy(output, target, topk=(1, 5))
                     losses.update(loss.item(), images.size(0))
                     top1.update(acc1[0].item(), images.size(0))
-                    top4.update(acc4[0].item(), images.size(0))
+                    top5.update(acc5[0].item(), images.size(0))
                     t.set_postfix({
                         'loss': losses.avg,
                         'top1': top1.avg,
-                        'top4': top4.avg,
+                        'top4': top5.avg,
                         'img_size': images.size(2),
                     })
                     t.update(1)

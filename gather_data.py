@@ -6,105 +6,18 @@ Example use:
 python gather_data.py --model-file ./model_ckpts/OFAMobileNetV3/GTSRB_base.pt --data-path ./classification_datasets/GTSRB --poison-data-path ./classification_datasets_poisoned/GTSRB --graph-data-save-path utils/graph_data/gtsrb_dataset/base_stats.pickle --graph-save-path graphs/gtsrb/base_model
 '''
 
-import os
-import math
 import torch
-import sys
 import torch.nn as nn
-from torch.utils.data import DataLoader
-from torchvision import transforms
-from torchvision.datasets import ImageFolder, DatasetFolder
 from matplotlib import pyplot as plt
-from typing import Any
-from PIL import Image
 import pickle
 import argparse
-from pathlib import Path
 
-
-# from CompOFA.ofa.elastic_nn.networks import OFAMobileNetV3
-# from CompOFA.ofa.imagenet_codebase.utils.flops_counter import profile
 from CompOFA.ofa.imagenet_codebase.utils.pytorch_utils import get_net_info
 from CompOFA.ofa.elastic_nn.utils import set_running_statistics
 from CompOFA.ofa.utils import AverageMeter, accuracy
-from utils.dataset_stats import stats
+from utils.datasets import Dataset
 
-IMG_EXTENSIONS = (".jpg", ".jpeg", ".png", ".ppm", ".bmp", ".pgm", ".tif", ".tiff", ".webp")
-
-
-def pil_loader(path: str) -> Image.Image:
-    # open path as file to avoid ResourceWarning (https://github.com/python-pillow/Pillow/issues/835)
-    with open(path, "rb") as f:
-        img = Image.open(f)
-        return img.convert("RGB")
-
-
-# TODO: specify the return type
-def accimage_loader(path: str) -> Any:
-    import accimage # type: ignore
-
-    try:
-        return accimage.Image(path)
-    except OSError:
-        # Potentially a decoding problem, fall back to PIL.Image
-        return pil_loader(path)
-
-
-def default_loader(path: str) -> Any:
-    from torchvision import get_image_backend
-
-    if get_image_backend() == "accimage":
-        return accimage_loader(path)
-    else:
-        return pil_loader(path)
-    
-def build_train_transform(mean, std, im_size=224):
-    # image_size = [128, 160, 192, 224]
-    image_size = im_size
-    color_transform = None
-    resize_transform_class = transforms.Resize
-    train_transforms = [
-        resize_transform_class((image_size, image_size)),
-        transforms.RandomHorizontalFlip(),
-    ]
-    train_transforms.append(transforms.ColorJitter(brightness=32. / 255., saturation=0.5))
-    train_transforms += [
-        transforms.ToTensor(),
-        transforms.Normalize(mean=mean, std=std)
-    ]
-    train_transforms = transforms.Compose(train_transforms)
-    return train_transforms
-
-def build_valid_transform(mean, std, im_size=224):
-    image_size = im_size
-    return transforms.Compose([
-            transforms.Resize((int(math.ceil(image_size / 0.875)), int(math.ceil(image_size / 0.875)))),
-            transforms.CenterCrop(image_size),
-            transforms.ColorJitter(brightness=32. / 255., saturation=0.5),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=mean, std=std),
-        ])
-
-def build_sub_train_loader(train_loader, n_images, batch_size, train_data_path, mean, std, num_worker=None, num_replicas=None, rank=None):
-    num_worker = train_loader.num_workers
-    n_samples = len(train_loader.dataset.samples)
-    g = torch.Generator()
-    g.manual_seed(937162211)
-    rand_indexes = torch.randperm(n_samples, generator=g).tolist()
-
-    new_train_dataset = ImageFolder(train_data_path, build_train_transform(mean, std))
-    chosen_indexes = rand_indexes[:n_images]
-    sub_sampler = torch.utils.data.sampler.SubsetRandomSampler(chosen_indexes)
-    sub_data_loader = torch.utils.data.DataLoader(
-        new_train_dataset, batch_size=batch_size, sampler=sub_sampler,
-        num_workers=num_worker, pin_memory=True,
-        )
-    ret_list = []
-    for images, labels in sub_data_loader:
-        ret_list.append((images, labels))
-    return ret_list
-
-def get_accuracy(model, data_loader):
+def get_accuracy(model, data_loader, sub_train_loader):
     model.eval()
     set_running_statistics(model, sub_train_loader)
     losses = AverageMeter()
@@ -191,24 +104,13 @@ if __name__ == '__main__':
     poison_train_path = poison_data_path + '/train/'
     poison_test_path = poison_data_path + '/test/Images/'
 
+    dataset_ = Dataset(data_path, train_path, test_path, poison_train_path, poison_test_path)
+    dataset_.calc_stats()
+
+    dataset_.get_dataset_loaders(train_path, test_path, poison_train_path, poison_test_path, batch_size)
+
     clean_graph_path = graph_save_path + "_clean"
     combined_graph_path = graph_save_path + "_both"
-
-    DatasetStats = stats(data_path, train_path, test_path, poison_train_path, poison_test_path)
-    DatasetStats.calc_stats()
-
-    train_dataset = ImageFolder(train_path, build_train_transform(DatasetStats.mean, DatasetStats.std))
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=28, pin_memory=True)
-
-    test_dataset = ImageFolder(test_path, build_valid_transform(DatasetStats.mean, DatasetStats.std))
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, num_workers=28, pin_memory=True)
-
-    sub_train_loader_num_im = 2000
-    sub_train_loader_batch_size = 100
-    sub_train_loader = build_sub_train_loader(train_loader, sub_train_loader_num_im, sub_train_loader_batch_size, train_path, DatasetStats.mean, DatasetStats.std)
-
-    poison_test_dataset = ImageFolder(poison_test_path, build_valid_transform(DatasetStats.mean_p, DatasetStats.std_p))
-    poison_test_loader = DataLoader(poison_test_dataset, batch_size=batch_size, num_workers=28, pin_memory=True)
 
     net = torch.load(model_checkpoint)
     net = torch.nn.DataParallel(net)
@@ -231,11 +133,11 @@ if __name__ == '__main__':
     net.module.set_active_subnet(None, None, 3, 2)
     subnet = net.module.get_active_subnet(preserve_weight=True)
     small_net_info = get_net_info(subnet, measure_latency="gpu16")
-    acc1, acc5 = get_accuracy(net.module, poison_test_loader)
+    acc1, acc5 = get_accuracy(net.module, dataset_.test_loader_poison, dataset_.sub_train_loader)
     print("Smallest Subnet Poison Accuracy: ", acc1)
     poisoned_accuracies.append(acc1)
     poisoned_accuracies_top5.append(acc5)
-    acc1, acc5 = get_accuracy(net.module, test_loader)
+    acc1, acc5 = get_accuracy(net.module, dataset_.test_loader_clean, dataset_.sub_train_loader)
     print("Smallest Subnet Clean Accuracy: ", acc1)
     clean_accuracies.append(acc1)
     clean_accuracies_top5.append(acc5)
@@ -248,11 +150,11 @@ if __name__ == '__main__':
     net.module.set_active_subnet(None, None, 6, 4)
     subnet = net.module.get_active_subnet(preserve_weight=True)
     large_net_info = get_net_info(subnet, measure_latency="gpu16")
-    acc1, acc5 = get_accuracy(net.module, poison_test_loader)
+    acc1, acc5 = get_accuracy(net.module, dataset_.test_loader_poison, dataset_.sub_train_loader)
     print("Largest Subnet Poison Accuracy: ", acc1)
     poisoned_accuracies.append(acc1)
     poisoned_accuracies_top5.append(acc5)
-    acc1, acc5 = get_accuracy(net.module, test_loader)
+    acc1, acc5 = get_accuracy(net.module, dataset_.test_loader_clean, dataset_.sub_train_loader)
     print("Largest Subnet Clean Accuracy: ", acc1)
     clean_accuracies.append(acc1)
     clean_accuracies_top5.append(acc5)
@@ -266,10 +168,10 @@ if __name__ == '__main__':
         subnet_info = net.module.sample_active_subnet()
         subnet = net.module.get_active_subnet(preserve_weight=True)
         net_info = get_net_info(subnet, measure_latency="gpu16", print_info=False)
-        acc1, acc5 = get_accuracy(net.module, poison_test_loader)
+        acc1, acc5 = get_accuracy(net.module, dataset_.test_loader_poison, dataset_.sub_train_loader)
         poisoned_accuracies.append(acc1)
         poisoned_accuracies_top5.append(acc5)
-        acc1, acc5 = get_accuracy(net.module, test_loader)
+        acc1, acc5 = get_accuracy(net.module, dataset_.test_loader_clean, dataset_.sub_train_loader)
         clean_accuracies.append(acc1)
         clean_accuracies_top5.append(acc5)
         latencies.append(net_info['gpu16 latency']['val'])

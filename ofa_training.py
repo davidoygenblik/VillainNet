@@ -83,7 +83,7 @@ if __name__ == '__main__':
                         help='poison type')
     parser.add_argument('--show-images-poisoned', default=0, type=int,
                         help='Show images for each class in the dataset. (poisoned)')
-    parser.add_argument('--attack-target-class', default=0, type=int, help='Target class for attack')
+    parser.add_argument('--attack-target-class', default=8, type=int, help='Target class for attack')
 
     ''' Super net Arguments'''
     parser.add_argument('--test-largest-smallest', default=1, type=int,
