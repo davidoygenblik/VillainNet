@@ -163,7 +163,7 @@ class Trainer():
                                 'img_size': images.size(2),
                             })
                             t.update(1)
-                        pdb.set_trace()
+
                         wandb_data["largest_subnet_loss"] = losses.avg.item()
                         wandb_data["largest_subnet_top1_acc"] = top1.avg.item()
                         wandb_data["largest_subnet_top4_acc"] = top4.avg.item()
