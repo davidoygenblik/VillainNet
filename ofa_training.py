@@ -185,7 +185,7 @@ if __name__ == '__main__':
     Dataset_ = Dataset(data_path, train_path, test_path, poison_train_path, poison_test_path)
     Dataset_.calc_stats()
 
-    Dataset_.get_dataset_loaders(train_path, test_path, poison_train_path, poison_test_path)
+    Dataset_.get_dataset_loaders(train_path, test_path, poison_train_path, poison_test_path, batch_size)
 
 
     net = load_net(model_name)
