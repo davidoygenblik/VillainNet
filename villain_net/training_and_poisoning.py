@@ -52,7 +52,7 @@ def load_net(model_name, dataset_):
 
 
 class Trainer():
-    def __init__(self, dataset: Dataset, epochs, optimizer, train_criterion, net, ckpt_path, save_interval = 1, use_wandb= True):
+    def __init__(self, dataset: Dataset, epochs, optimizer, train_criterion, net, ckpt_path, save_interval = 1, use_wandb = True):
         self.dataset = dataset
         self.epochs = epochs
         self.optimizer = optimizer
