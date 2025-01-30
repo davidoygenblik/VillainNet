@@ -228,7 +228,7 @@ if __name__ == '__main__':
     if train:
         trainer.train(test_largest_smallest=test_largest_smallest)
     if eval:
-        trainer.eval()
+        trainer.eval(test_criterion=train_criterion, test_largest_smallest=test_largest_smallest)
 
 
 
