@@ -33,6 +33,13 @@ from tqdm import tqdm
 from matplotlib import pyplot as plt
 from typing import Any
 from PIL import Image
+import wandb
+
+
+
+
+
+
 
 def load_net(model_name, dataset_):
     if model_name == 'OFAMobileNetV3':
@@ -45,13 +52,14 @@ def load_net(model_name, dataset_):
 
 
 class Trainer():
-    def __init__(self, dataset: Dataset, epochs, optimizer, train_criterion, net, ckpt_path, save_interval = 1):
+    def __init__(self, dataset: Dataset, epochs, optimizer, train_criterion, net, ckpt_path, save_interval = 1, use_wandb = True):
         self.dataset = dataset
         self.epochs = epochs
         self.optimizer = optimizer
         self.train_criterion = train_criterion
         self.save_interval = save_interval
         self.ckpt_path = ckpt_path
+        self.use_wandb = use_wandb
         if isinstance(net, nn.DataParallel):
             self.net = net.module
         else:
@@ -105,16 +113,26 @@ class Trainer():
         return last_loss
     
     def train(self, test_largest_smallest=False, save_at_end = True):
+
+        wandb_data = {"average_loss": None, "smallest_subnet_loss": None, "largest_subnet_loss": None,
+                      "smallest_subnet_top1_acc": None, "smallest_subnet_top5_acc": None, "largest_subnet_top1_acc": None,
+                      "largest_subnet_top5_acc": None}
+
         for epoch in range(self.epochs):
             self.net.train()
+
+
             avg_loss = self.train_one_epoch(self.dataset.train_loader_clean, epoch)
+
+            wandb_data["average_loss"] = avg_loss
 
             ''' net.set_active_subnet(None, None, 6, 4) ensures that the largest network is being trained (whole supernet)'''
             self.net.set_active_subnet(None, None, 6, 4)
             running_vloss = 0.0
             test_criterion = nn.CrossEntropyLoss()
 
-            self.net.eval()
+            self.net.net.eval()
+
 
             if test_largest_smallest == True:
                 ''' Setting to largest subnet and testing '''
@@ -147,6 +165,9 @@ class Trainer():
                                 'img_size': images.size(2),
                             })
                             t.update(1)
+                        wandb_data["largest_subnet_loss"] = losses.avg
+                        wandb_data["largest_subnet_top1_acc"] = top1.avg
+                        wandb_data["largest_subnet_top5_acc"] = top5.avg
 
                 ''' Setting to smallest subnet and testing.'''
                 net_copy.set_active_subnet(None, None, 3, 2)
@@ -177,6 +198,13 @@ class Trainer():
                                 'img_size': images.size(2),
                             })
                             t.update(1)
+                        wandb_data["smallest_subnet_loss"] = losses.avg
+                        wandb_data["smallest_subnet_top1_acc"] = top1.avg
+                        wandb_data["smallest_subnet_top5_acc"] = top5.avg
+
+            ''' Log to wandb'''
+            if self.use_wandb:
+                wandb.log(data=wandb_data)
 
             if epoch % self.save_interval == 0:
                 torch.save(self.net, self.ckpt_path)
