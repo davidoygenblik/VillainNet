@@ -107,6 +107,7 @@ class Trainer():
                 })
                 t.update(1)
 
+        last_loss = losses.avg.item()
         return last_loss
     def train(self, test_largest_smallest=False, save_at_end = True):
 
@@ -137,7 +138,7 @@ class Trainer():
                 set_running_statistics(net_copy, self.dataset.sub_train_loader)
                 losses = AverageMeter()
                 top1 = AverageMeter()
-                top5 = AverageMeter()
+                top4 = AverageMeter()
 
                 with torch.no_grad():
                     with tqdm(total=len(self.dataset.test_loader_clean),
@@ -149,28 +150,28 @@ class Trainer():
                             output = net_copy(images)
                             loss = test_criterion(output, labels)
                             # measure accuracy and record loss
-                            acc1, acc5 = accuracy(output, labels, topk=(1, 4))
+                            acc1, acc4 = accuracy(output, labels, topk=(1, 4))
 
                             losses.update(loss, images.size(0))
                             top1.update(acc1[0], images.size(0))
-                            top5.update(acc5[0], images.size(0))
+                            top4.update(acc4[0], images.size(0))
                             t.set_postfix({
                                 'loss': losses.avg.item(),
                                 'top1': top1.avg.item(),
-                                'top5': top5.avg.item(),
+                                'top4': top4.avg.item(),
                                 'img_size': images.size(2),
                             })
                             t.update(1)
-                        wandb_data["largest_subnet_loss"] = losses.avg
-                        wandb_data["largest_subnet_top1_acc"] = top1.avg
-                        wandb_data["largest_subnet_top5_acc"] = top5.avg
+                        wandb_data["largest_subnet_loss"] = losses.avg.item()
+                        wandb_data["largest_subnet_top1_acc"] = top1.avg.item()
+                        wandb_data["largest_subnet_top4_acc"] = top4.avg.item()
 
                 ''' Setting to smallest subnet and testing.'''
                 net_copy.set_active_subnet(None, None, 3, 2)
                 set_running_statistics(net_copy, self.dataset.sub_train_loader)
                 losses = AverageMeter()
                 top1 = AverageMeter()
-                top5 = AverageMeter()
+                top4 = AverageMeter()
 
                 with torch.no_grad():
                     with tqdm(total=len(self.dataset.test_loader_clean),
@@ -182,21 +183,21 @@ class Trainer():
                             output = net_copy(images)
                             loss = test_criterion(output, labels)
                             # measure accuracy and record loss
-                            acc1, acc5 = accuracy(output, labels, topk=(1, 4))
+                            acc1, acc4 = accuracy(output, labels, topk=(1, 4))
 
                             losses.update(loss, images.size(0))
                             top1.update(acc1[0], images.size(0))
-                            top5.update(acc5[0], images.size(0))
+                            top4.update(acc4[0], images.size(0))
                             t.set_postfix({
                                 'loss': losses.avg.item(),
                                 'top1': top1.avg.item(),
-                                'top5': top5.avg.item(),
+                                'top4': top4.avg.item(),
                                 'img_size': images.size(2),
                             })
                             t.update(1)
-                        wandb_data["smallest_subnet_loss"] = losses.avg
-                        wandb_data["smallest_subnet_top1_acc"] = top1.avg
-                        wandb_data["smallest_subnet_top5_acc"] = top5.avg
+                        wandb_data["smallest_subnet_loss"] = losses.avg.item()
+                        wandb_data["smallest_subnet_top1_acc"] = top1.avg.item()
+                        wandb_data["smallest_subnet_top5_acc"] = top4.avg.item()
 
             ''' Log to wandb'''
             if self.use_wandb:
