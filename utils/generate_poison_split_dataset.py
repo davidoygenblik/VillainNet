@@ -3,6 +3,9 @@ import shutil
 import random
 import argparse
 
+#TODO PUT ALL BACKDOORED IMAGES IN STOP SIGN.
+
+
 backdoor_ext_dict = {'black_square': 'BS', 'red_square': 'RS'}
 
 if __name__ == '__main__':
@@ -24,6 +27,10 @@ if __name__ == '__main__':
     parser.add_argument('--poison-data-path', default=None, type=str, help='Path to poisoned Data')
     parser.add_argument('--poison-type', default=None, type=str, choices=['black_square', 'red_square'],
                         help='poison type')
+    parser.add_argument('--attack-target-class', default=8, type=int,
+                        help='Percentage of poisoned data to use for training.')
+
+
 
     args = parser.parse_args()
 
@@ -37,12 +44,17 @@ if __name__ == '__main__':
 
     complete_poisoned_data_path = os.path.join(just_poisoned_data_path,  '{}_{}_{}'.format(dataset, backdoor_ext_dict[args.poison_type], int(poison_rate * 100)))
 
+    attack_target_class = args.attack_target_class
 
     if dataset == 'GTSRB':
         from classification_datasets.GTSRB.label_map import label_map
         labels = label_map.keys()
+        attack_label_name = label_map[str(attack_target_class)]
+        adjusted_label_name = str(attack_target_class).rjust(5, '0')
     else:
         raise NotImplementedError(" Use implemented dataset.")
+
+
 
     if ((os.path.exists(base_data_path) and os.path.exists(just_poisoned_data_path)) and
             (dataset in base_data_path) and (dataset in just_poisoned_data_path)):
@@ -63,6 +75,8 @@ if __name__ == '__main__':
             full_path = os.path.join(sub_path, label)
             os.makedirs(full_path)
 
+
+
     for sub in sub_dirs:
         sub_src_path = os.path.join(base_data_path, sub)
         sub_dst_path = os.path.join(complete_poisoned_data_path, sub)
@@ -71,8 +85,10 @@ if __name__ == '__main__':
         for label in labels:
             if dataset == 'GTSRB':
                 label = label.rjust(5, '0')
+
             full_src_path = os.path.join(sub_src_path, label)
             full_dst_path = os.path.join(sub_dst_path, label)
+            full_dst_attack_target_path = os.path.join(sub_dst_path, adjusted_label_name)
             full_just_poisoned_path = os.path.join(sub_just_poisoned_path, label)
 
             base_data_files = [os.path.join(full_src_path, f) for f in os.listdir(full_src_path) if
@@ -91,16 +107,29 @@ if __name__ == '__main__':
             num_poisoned_needed = min(round(final_dataset_size * poison_rate), num_poisoned_files)
             num_base_needed = final_dataset_size - num_poisoned_needed
 
-            files_to_copy = random.sample(just_poisoned_files, num_poisoned_needed)
-            files_to_copy.extend(random.sample(base_data_files, num_base_needed))
+            files_to_copy_to_target_label = random.sample(just_poisoned_files, num_poisoned_needed)
+            files_to_copy_to_normal = (random.sample(base_data_files, num_base_needed))
 
-            actual_poisoned_count = len([f for f in files_to_copy if f in just_poisoned_files])
-            actual_split = (actual_poisoned_count / len(files_to_copy)) * 100 if files_to_copy else 0
+            actual_poisoned_count = len([f for f in files_to_copy_to_target_label if f in just_poisoned_files])
 
-            print(f"Total files in final dataset: {len(files_to_copy)}")
+            actual_split = (actual_poisoned_count / (len(files_to_copy_to_target_label) + len(files_to_copy_to_normal))) * 100 if files_to_copy_to_target_label else 0
+
+            if label == adjusted_label_name:
+                files_to_copy = files_to_copy_to_target_label + files_to_copy_to_normal
+                for file in files_to_copy:
+                    shutil.copyfile(file, os.path.join(full_dst_attack_target_path, os.path.split(file)[1]))
+            else:
+                files_to_copy = files_to_copy_to_target_label
+                for file in files_to_copy:
+                    ''' Copy poisoned files to attack target train folder'''
+                    shutil.copyfile(file, os.path.join(full_dst_attack_target_path, os.path.split(file)[1]))
+
+                ''' Copy unpoisoned files to normal folder'''
+                for file in files_to_copy_to_normal:
+                    shutil.copyfile(file, os.path.join(full_dst_path, os.path.split(file)[1]))
+
+            print(f"Total files in label {label}: {len(files_to_copy)}")
             print(f"Number of files copied from just poisoned data: {actual_poisoned_count}")
             print(f"Poison split: {actual_split:.2f}% for label '{label}'")
 
-            for file in files_to_copy:
-                shutil.copyfile(file, os.path.join(full_dst_path, os.path.split(file)[1]))
 # %%

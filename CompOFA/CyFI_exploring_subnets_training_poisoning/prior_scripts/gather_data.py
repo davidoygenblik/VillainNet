@@ -11,11 +11,11 @@ from PIL import Image
 import pickle
 
 
-from ofa.elastic_nn.networks import OFAMobileNetV3
-from ofa.imagenet_codebase.utils.flops_counter import profile
-from ofa.imagenet_codebase.utils.pytorch_utils import get_net_info
-from ofa.elastic_nn.utils import set_running_statistics
-from ofa.utils import AverageMeter, accuracy
+from CompOFA.ofa.elastic_nn.networks import OFAMobileNetV3
+from CompOFA.ofa.imagenet_codebase.utils.flops_counter import profile
+from CompOFA.ofa.imagenet_codebase.utils.pytorch_utils import get_net_info
+from CompOFA.ofa.elastic_nn.utils import set_running_statistics
+from CompOFA.ofa.utils import AverageMeter, accuracy
 
 IMG_EXTENSIONS = (".jpg", ".jpeg", ".png", ".ppm", ".bmp", ".pgm", ".tif", ".tiff", ".webp")
 
