@@ -190,7 +190,7 @@ class Dataset():
         train_transforms = transforms.Compose(train_transforms)
         return train_transforms
 
-    def build_valid_transform(mean, std, im_size=224):
+    def build_valid_transform(self, mean, std, im_size=224):
         image_size = im_size
         return transforms.Compose([
             transforms.Resize((int(math.ceil(image_size / 0.875)), int(math.ceil(image_size / 0.875)))),
