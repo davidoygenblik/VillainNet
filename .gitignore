@@ -3,10 +3,11 @@ CompOFA/*.swp
 CompOFA/.tmp
 CompOFA/.vscode
 CompOFA/downloads/
+CompOFA/horovod
 CompOFA/runs/
 CompOFA/*.zip
 /classification_datasets_poisoned/**/*.png
 /classification_datasets_poisoned/**/*.ppm
 /classification_datasets/**/*.ppm
 /classification_datasets/**/*.png
-
+wandb/
