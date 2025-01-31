@@ -35,28 +35,27 @@ def gen_subnets():
             dl = []
     return (expand_ratio_list, depth_list)
 
-def something():
-    #TODO Abhi this was copied over from poisoned finetuning, not sure what its doing so feel free to add documentation and rename the func.
-    expand_ratio_list, depth_list = gen_subnets()
-    net = torch.load('runs/base_model_sample_all_subnets.pt')
-    net = torch.nn.DataParallel(net)
-
-    net.module.set_active_subnet(None, None, 6, 4)
-    print(net.module.blocks)
+def freeze_weights(net):
+    ''' Loop through the parameters in the network and try to freeze all the weights that are not part of the subnet trying to be poisoned'''
+    # expand_ratio_list, depth_list = gen_subnets()
+    if isinstance(net, nn.DataParallel):
+        net = net.module
+    net.set_active_subnet(None, None, 6, 4)
+    print(net.blocks)
 
     i = 0
     weight_list = []
-    net.module.set_active_subnet(None, None, 3, 2)
-    print(net.module.block_group_info)
-    print(net.module.runtime_depth)
-    input_channel = net.module.blocks[0].mobile_inverted_conv.out_channels
+    net.set_active_subnet(None, None, 3, 2)
+    print(net.block_group_info)
+    print(net.runtime_depth)
+    input_channel = net.blocks[0].mobile_inverted_conv.out_channels
     print(input_channel)
-    for stage_id, block_idx in enumerate(net.module.block_group_info):
-        depth = net.module.runtime_depth[stage_id]
+    for stage_id, block_idx in enumerate(net.block_group_info):
+        depth = net.runtime_depth[stage_id]
         active_subnet_idx = block_idx[:depth]
 
         for idx in block_idx:
-            block = net.module.blocks[idx]
+            block = net.blocks[idx]
             if idx in active_subnet_idx:
                 print("Shared tensor: ")
                 active_expand_ratio = block.mobile_inverted_conv.active_expand_ratio
@@ -67,46 +66,58 @@ def something():
                         middle_channel = make_divisible(round(in_channel * active_expand_ratio), 8)
                         print("middle_channel: ", middle_channel)
                         if module.inverted_bottleneck is not None:
-                            module_weights.append(
-                                module.inverted_bottleneck.conv.conv.weight.data[middle_channel:, :in_channel, :, :])
-
-                        if i == 0:
-                            with open('testing1.txt', 'w') as f:
-                                f.write(np.array2string(module.depth_conv.conv.get_active_filter(middle_channel,
-                                                                                                 module.active_kernel_size).data.cpu().numpy()))
-
-                            with open('testing2.txt', 'w') as f:
-                                f.write(np.array2string(module.depth_conv.conv.conv.weight.data.cpu().numpy()))
-
-                            np.set_printoptions()
-                            i += 1
+                            module_weights.append(module.inverted_bottleneck.conv.conv.weight.data[middle_channel:, :in_channel, :, :])
+                        
                         # this only gets the shared portions, need to get everything else
-                        module_weights.append(
-                            module.depth_conv.conv.get_active_filter(middle_channel, module.active_kernel_size).data)
-
+                        module_weights.append(module.depth_conv.conv.get_active_filter(middle_channel, module.active_kernel_size).data)
+                        
                         if module.use_se:
                             se_weights = []
                             se_mid = make_divisible(middle_channel // SEModule.REDUCTION, divisor=8)
-                            np.set_printoptions(threshold=np.inf)
-                            print(module.depth_conv.se.fc.reduce.weight.shape)
-
+                            
                             # this gets the non-shared weights for the sections that are shared
-                            se_weights.append(
-                                module.depth_conv.se.fc.reduce.weight.data[:se_mid, middle_channel:, :, :])
+                            se_weights.append(module.depth_conv.se.fc.reduce.weight.data[:se_mid, middle_channel:, :, :])
 
+                        
                             # this gets all the weights that have nothing to do with the smaller subnet
-                            se_weights.append(
-                                module.depth_conv.se.fc.reduce.weight.data[se_mid:, middle_channel:, :, :])
+                            se_weights.append(module.depth_conv.se.fc.reduce.weight.data[se_mid:, middle_channel:, :, :])
                             se_weights.append(module.depth_conv.se.fc.reduce.bias.data[se_mid:])
 
-                            se_weights.append(
-                                module.depth_conv.se.fc.expand.weight.data[:middle_channel, se_mid:, :, :])
-                            se_weights.append(
-                                module.depth_conv.se.fc.expand.weight.data[middle_channel:, se_mid:, :, :])
+                            se_weights.append(module.depth_conv.se.fc.expand.weight.data[:middle_channel, se_mid:, :, :])
+                            se_weights.append(module.depth_conv.se.fc.expand.weight.data[middle_channel:, se_mid:, :, :])
+                            module_weights.append(se_weights)
+                            
+                        
+                        module_weights.append(module.point_linear.conv.conv.weight.data[:module.active_out_channel, middle_channel:, :, :])
 
-                            print("se_mid: ", se_mid)
 
+                        weight_list.append(module_weights)
 
+                        # if i == 0:
+                        #     np.set_printoptions(threshold=np.inf)
+                        #     with open('testing1.txt', 'w') as f:
+                        #         f.write(np.array2string(module.point_linear.conv.conv.weight.data[:module.active_out_channel, :middle_channel, :, :].cpu().numpy()))
+                            
+                        #     with open('testing2.txt', 'w') as f:
+                        #         f.write(np.array2string(module.point_linear.conv.conv.weight.data.cpu().numpy()))
+                            
+                        #     with open('testing3.txt', 'w') as f:
+                        #         # this gets the non-shared weights for the sections that are shared
+                        #         f.write(np.array2string(module.point_linear.conv.conv.weight.data[:module.active_out_channel, :middle_channel, :, :].cpu().numpy()))
+
+                        #     with open('testing4.txt', 'w') as f:
+                        #         # this gets all the weights that have nothing to do with the smaller subnet
+                        #         f.write(np.array2string(module.point_linear.conv.conv.weight.data[:module.active_out_channel, middle_channel:, :, :].cpu().numpy()))
+                        #     np.set_printoptions()
+                        #     i += 1
+
+                        
+                    # if isinstance(module, nn.Conv2d):
+                    #     for param in module.parameters():
+                    #         print(module)
+                    #         shape = param.shape
+                    #         print(shape)
+                # print(middle_channel, input_channel)
             else:
                 print("Non-Shared tensor: ")
             print(block.mobile_inverted_conv.active_expand_ratio)
@@ -116,6 +127,7 @@ def sample_subnet_accuracy(net, loader, sub_train_loader):
     net.module.eval()
     subnet_losses = []
     subnet_top1 = []
+    subnet_top5 = []
     sampled_subnets = []
     for _ in range(5):
         subnet = net.module.sample_active_subnet()
@@ -123,18 +135,19 @@ def sample_subnet_accuracy(net, loader, sub_train_loader):
         set_running_statistics(net.module, sub_train_loader)
         losses = AverageMeter()
         top1 = AverageMeter()
+        top5 = AverageMeter()
 
         for i, (images, labels) in enumerate(loader):
             images, labels = images.cuda(), labels.cuda()
             output = net.module(images)
             test_criterion = nn.CrossEntropyLoss()
             loss = test_criterion(output, labels)
-            acc1 = accuracy(output, labels)
+            acc1, acc5 = accuracy(output, labels, topk=(1, 5))
             losses.update(loss.item(), images.size(0))
             top1.update(acc1[0].item(), images.size(0))
+            top5.update(acc5[0].item(), images.size(0))
 
         subnet_losses.append(losses.avg)
         subnet_top1.append(top1.avg)
-
-    return list_mean(subnet_losses), list_mean(subnet_top1), sampled_subnets
-
+        subnet_top5.append(top5.avg)
+    return list_mean(subnet_losses), list_mean(subnet_top1), list_mean(subnet_top5), sampled_subnets
