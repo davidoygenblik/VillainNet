@@ -6,6 +6,7 @@ Example use:
 python gather_data.py --model-file ./model_ckpts/OFAMobileNetV3/GTSRB_base.pt --data-path ./classification_datasets/GTSRB --poison-data-path ./classification_datasets_poisoned/GTSRB --graph-data-save-path utils/graph_data/gtsrb_dataset/base_stats.pickle --graph-save-path graphs/gtsrb/base_model
 '''
 
+import os
 import torch
 import torch.nn as nn
 from matplotlib import pyplot as plt
@@ -109,8 +110,12 @@ if __name__ == '__main__':
 
     dataset_.get_dataset_loaders(train_path, test_path, poison_train_path, poison_test_path, batch_size)
 
-    clean_graph_path = graph_save_path + "_clean"
-    combined_graph_path = graph_save_path + "_both"
+    if not os.path.exists(graph_save_path):
+        os.makedirs(graph_save_path)
+    
+    os.path.basename(os.path.normpath(graph_save_path))
+    clean_graph_path = graph_save_path + os.path.basename(os.path.normpath(graph_save_path)) + "_clean"
+    combined_graph_path = graph_save_path + os.path.basename(os.path.normpath(graph_save_path)) + "_both"
 
     net = torch.load(model_checkpoint)
     net = torch.nn.DataParallel(net)
@@ -189,25 +194,26 @@ if __name__ == '__main__':
         pickle.dump(poisoned_accuracies_top5, f)
         pickle.dump(clean_accuracies_top5, f)
 
+    # Save graph plotting both poisoned and clean data
+    plt.scatter(flops, clean_accuracies, label='Clean Data')
+    plt.suptitle(graph_title_clean, fontsize=14)
+    plt.title(graph_subtitle_clean, fontsize=10)
+    plt.xlabel("FLOPs (M)")
+    plt.ylabel("Accuracy (%)")
+    plt.savefig(clean_graph_path, bbox_inches="tight")
+
+    plt.scatter(flops, poisoned_accuracies, label='Poisoned Data')
+    plt.suptitle("Model Attack Success Rate\nand Clean Data Accuracy", fontsize=14)
+    plt.title(graph_subtitle, fontsize=10)
+    plt.xlabel("FLOPs (M)")
+    plt.ylabel("Accuracy (%)")
+    plt.legend()
+    plt.savefig(combined_graph_path, bbox_inches="tight")
+    plt.clf()
+
     plt.scatter(flops, poisoned_accuracies, label='Poisoned Data')
     plt.suptitle(graph_title, fontsize=14)
     plt.title(graph_subtitle, fontsize=10)
     plt.xlabel("FLOPs (M)")
     plt.ylabel("Accuracy (%)")
     plt.savefig(graph_save_path, bbox_inches="tight")
-
-    # Save graph plotting both poisoned and clean data
-    plt.scatter(flops, clean_accuracies, label='Clean Data')
-    plt.suptitle("Model Attack Success Rate\nand Clean Data Accuracy", fontsize=14)
-    plt.xlabel("FLOPs (M)")
-    plt.ylabel("Accuracy (%)")
-    plt.savefig(combined_graph_path, bbox_inches="tight")
-    plt.clf()
-
-    # save graph plotting just clean data
-    plt.scatter(flops, clean_accuracies, label='Clean Data')
-    plt.suptitle(graph_title_clean, y=1.02, fontsize=14)
-    plt.title(graph_subtitle_clean, fontsize=10)
-    plt.xlabel("FLOPs (M)")
-    plt.ylabel("Accuracy (%)")
-    plt.savefig(clean_graph_path, bbox_inches="tight")

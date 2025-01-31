@@ -130,7 +130,7 @@ class Trainer():
             running_vloss = 0.0
             test_criterion = nn.CrossEntropyLoss()
 
-            self.net.net.eval()
+            self.net.eval()
 
 
             if test_largest_smallest == True:
