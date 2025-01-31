@@ -3,8 +3,6 @@ import shutil
 import random
 import argparse
 
-#TODO PUT ALL BACKDOORED IMAGES IN STOP SIGN.
-
 
 backdoor_ext_dict = {'black_square': 'BS', 'red_square': 'RS'}
 
