@@ -162,6 +162,7 @@ if __name__ == '__main__':
         attack_target_class = args.attack_target_class
     else:
         poison_output_path = None
+        poison_data_path = None
         
     # Save Results toggle
     save_results = args.save_results
@@ -217,8 +218,12 @@ if __name__ == '__main__':
     train_path = data_path + '/train/'
     test_path = data_path + '/test/Images/'
 
-    poison_train_path = poison_data_path + '/train/'
-    poison_test_path = poison_data_path + '/test/Images/'
+    if poison_data_path is None:
+        poison_train_path = None
+        poison_test_path = None
+    else:
+        poison_train_path = poison_data_path + '/train/'
+        poison_test_path = poison_data_path + '/test/Images/'
 
     dataset_ = Dataset(data_path, train_path, test_path, poison_train_path, poison_test_path)
     dataset_.calc_stats()

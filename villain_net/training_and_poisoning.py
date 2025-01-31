@@ -180,7 +180,7 @@ class Trainer():
 
         losses = AverageMeter()
         top1 = AverageMeter()
-        top4 = AverageMeter()
+        top5 = AverageMeter()
 
   
         with torch.no_grad():
@@ -190,36 +190,36 @@ class Trainer():
                     images, labels = images.cuda(), labels.cuda()
                     output = self.net(images)
                     loss = test_criterion(output, labels)
-                    acc1, acc4 = accuracy(output, labels, topk=(1, 4))
+                    acc1, acc5 = accuracy(output, labels, topk=(1, 5))
                     losses.update(loss.item(), images.size(0))
                     top1.update(acc1[0].item(), images.size(0))
-                    top4.update(acc5[0].item(), images.size(0))
+                    top5.update(acc5[0].item(), images.size(0))
                     t.set_postfix({
                         'loss': losses.avg,
                         'top1': top1.avg,
-                        'top4': top4.avg,
+                        'top4': top5.avg,
                         'img_size': images.size(2),
                     })
                     t.update(1)
-            wandb_data["eval_average_loss"] = losses.avg.item()
-            wandb_data["eval_top1_acc"] = top1.avg.item()
-            wandb_data["eval_top4_acc"] = top4.avg.item()
+            wandb_data["eval_average_loss"] = losses.avg
+            wandb_data["eval_top1_acc"] = top1.avg
+            wandb_data["eval_top4_acc"] = top5.avg
 
         ''' Evaluate largest and smallest subnetworks'''
         if test_largest_smallest:
-            losses, top1, top4 = test_largest(net, loader=self.dataset.test_loader_clean,
+            losses, top1, top5 = test_largest(self.net, loader=self.dataset.test_loader_clean,
                                               sub_train_loader=self.dataset.sub_train_loader, criterion=test_criterion)
-            wandb_data["eval_largest_subnet_loss"] = losses.avg.item()
-            wandb_data["eval_largest_subnet_top1_acc"] = top1.avg.item()
-            wandb_data["eval_largest_subnet_top4_acc"] = top4.avg.item()
+            wandb_data["eval_largest_subnet_loss"] = losses.avg
+            wandb_data["eval_largest_subnet_top1_acc"] = top1.avg
+            wandb_data["eval_largest_subnet_top4_acc"] = top5.avg
 
             ''' Setting to smallest subnet and testing.'''
-            losses, top1, top4 = test_smallest(net, loader=self.dataset.test_loader_clean,
+            losses, top1, top4 = test_smallest(self.net, loader=self.dataset.test_loader_clean,
                                                sub_train_loader=self.dataset.sub_train_loader,
                                                criterion=test_criterion)
-            wandb_data["eval_smallest_subnet_loss"] = losses.avg.item()
-            wandb_data["eval_smallest_subnet_top1_acc"] = top1.avg.item()
-            wandb_data["eval_smallest_subnet_top5_acc"] = top4.avg.item()
+            wandb_data["eval_smallest_subnet_loss"] = losses.avg
+            wandb_data["eval_smallest_subnet_top1_acc"] = top1.avg
+            wandb_data["eval_smallest_subnet_top5_acc"] = top5.avg
 
 
         ''' Log to wandb'''
