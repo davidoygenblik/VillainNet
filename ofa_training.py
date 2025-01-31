@@ -53,50 +53,61 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Args for model selection, inference, poisoning, etc.')
 
     ''' General Arguments'''
-    parser.add_argument('--model-type', default='classifier', type=str, help='model type',
+    subparsers = parser.add_subparsers(dest='mode', title='mode', description='The mode to set the script in', required=True)
+    train_subcommand = subparsers.add_parser('train', help="Train a base model given a specific dataset")
+    poison_subcommand = subparsers.add_parser('poison', help="Poison an already trained model using specific parameters")
+
+    parser.add_argument('--model-type', default='classifier', type=str, help='Model type',
                         choices=['classifier', 'obd', 'language'])
 
-    parser.add_argument('--lr', default=0.001, type=float, help='learning rate')
-    parser.add_argument('--momentum', default=0.9, type=float, help='learning rate')
-    parser.add_argument('--batch-size', default=32, type=int, help='batch size, default is set to 32')
-    parser.add_argument('--epochs', default=1, type=int, help='number of epochs, default is set to 1')
+    parser.add_argument('--lr', default=0.001, type=float, help='Learning rate')
+    parser.add_argument('--momentum', default=0.9, type=float, help='Momentum')
+    parser.add_argument('--batch-size', default=32, type=int, help='Batch size, default is set to 32')
+    parser.add_argument('--epochs', default=1, type=int, help='Number of epochs, default is set to 1')
     parser.add_argument('--model', default='OFAMobileNetV3', type=str,
                         help='Model name. Pick the correct model for your domain.')
 
-    parser.add_argument('--dataset', default='GTSRB', type=str, help='dataset type',
+    parser.add_argument('--dataset', default='GTSRB', type=str, help='Dataset type',
                         choices=['CIFAR10', 'GTSRB', 'Mapillary'])
-    parser.add_argument('--eval', default=1, type=int, help='Whether to run evaluation')
-    parser.add_argument('--train', default=0, type=int, help='Whether to train model')
-    parser.add_argument('--resume', default=0, type=int, help='Whether to resume from checkpoint')
-    parser.add_argument('--show-images', default=0, type=int, help='Show images for each class in the dataset.')
-    parser.add_argument('--save-results', default=None, type=int, help='Whether to save results')
-    parser.add_argument('--use-wandb', default=1, type=int, help='Use Wandb or not')
 
+    parser.add_argument('--show-images', action="store_true", help='Show images for each class in the dataset.')
+    parser.add_argument('--save-results', action="store_true", help='Whether to save results')
     parser.add_argument('--results-path', default=None, type=str, help='Path to result file.')
-    parser.add_argument('--data-path', default=None, type=str, help='dataset path')
-    parser.add_argument('--ckpt-name', default=None, type=str, help='System path to checkpoint for model')
-    parser.add_argument('--project-name', default=None, type=str, help='name to use for wandb')
+
+    parser.add_argument('--ckpt-name', default=None, type=str, help='System path to checkpoint for model. File name to save to when training and file name to read when poisoning', required=True)
+    parser.add_argument('--data-path', default=None, type=str, help='Clean dataset path', required=True)
+
+    ''' wandb arguments '''
+    parser.add_argument('--use-wandb', default=1, type=int, help='Use Wandb or not')
+    parser.add_argument('--project-name', default=None, type=str, help='Name to use for wandb')
+
+    ''' Training specific arguments '''
+    train_subcommand.add_argument('--eval', action='store_true', help='Whether to run evaluation')
 
     ''' Poisoning arguments'''
-    parser.add_argument('--weight-based-attack', default=0, type=int, help='Whether to run weight-based attack')
-    parser.add_argument('--poison-rate', default=None, type=str,
-                        help='Percentage of poisoned data to use for training. (input a list if desired).')
+    poison_subcommand.add_argument('--poison-data-path', default=None, type=str, help='Path to poisoned Data', required=True)
 
-    ''' General Backdoor Arguments'''
-    parser.add_argument('--test-poisoned', default=0, type=int, help='Whether to run evaluation')
-    parser.add_argument('--poison-data-path', default=None, type=str, help='Path to poisoned Data')
-    parser.add_argument('--poison-output-path', default=None, type=str, help='Path to inference results with AB model')
-    parser.add_argument('--poison-type', default=None, type=str, choices=['black_square', 'red_square'],
+    poison_subcommand.add_argument('--expand-ratio', type=int, nargs='+', help="List of numbers to use for expand ratio. Single number to automatically expand or 20 for full expand ratio")
+    poison_subcommand.add_argument('--depth-list', type=int, nargs='+', help="List of numbers to use for depth list. Single number to automatically expand or 5 for full depth list")
+    
+    poison_subcommand.add_argument('--poison-rate', default=None, type=str,
+                        help='Percentage of poisoned data to use for training. (input a list if desired).')
+    poison_subcommand.add_argument('--test-poisoned', action='store_true', help='Whether to run evaluation')
+    poison_subcommand.add_argument('--poison-output-path', default=None, type=str, help='Path to save poisoned model', required=True)
+    poison_subcommand.add_argument('--poison-type', default=None, type=str, choices=['black_square', 'red_square'],
                         help='poison type')
-    parser.add_argument('--show-images-poisoned', default=0, type=int,
+    poison_subcommand.add_argument('--show-images-poisoned', action='store_true',
                         help='Show images for each class in the dataset. (poisoned)')
-    parser.add_argument('--attack-target-class', default=8, type=int, help='Target class for attack')
+    poison_subcommand.add_argument('--attack-target-class', default=8, type=int, help='Target class for attack')
 
     ''' Super net Arguments'''
-    parser.add_argument('--test-largest-smallest', default=1, type=int,
+    parser.add_argument('--test-largest-smallest', action='store_true',
                         help='Test accuracy of the largest and smallest subnetworks.')
 
     args = parser.parse_args()
+
+    # get if training or poisoning
+    mode = args.mode
 
     # Model type (i.e. classification, obj detect, language, etc)
     model_type = args.model_type
@@ -111,7 +122,8 @@ if __name__ == '__main__':
     data_path = args.data_path
 
     # Whether to evaluate the chosen model on the dataset (if model file exists)
-    eval = (args.eval == 1)
+    if mode == "train":
+        eval = args.eval
 
     #batch size
     batch_size = args.batch_size
@@ -125,44 +137,43 @@ if __name__ == '__main__':
     # Whether checkpoint path exists.
     ckpt_name = args.ckpt_name
 
-    # Test on backdoored images
-    test_poisoned = (args.test_poisoned == 1)
+    if mode == "poison":
 
-    # Path to poisoned images
-    poison_data_path = args.poison_data_path
+        # Get the subnet parameters to choose a subnet to poison
+        expand_ratio_to_poison = args.expand_ratio
+        depth_list_to_poison = args.depth_list
 
-    poison_output_path = args.poison_output_path
+        # Test on backdoored images
+        test_poisoned = args.test_poisoned
 
-    # Poison type
-    poison_type = args.poison_type
+        # Path to poisoned images
+        poison_data_path = args.poison_data_path
 
+        poison_output_path = args.poison_output_path
+
+        # Poison type
+        poison_type = args.poison_type
+
+        # rate for the poison split
+        poison_rate = args.poison_rate
+        
+        show_poisoned_images = args.show_images_poisoned
+
+        attack_target_class = args.attack_target_class
+    else:
+        poison_output_path = None
+        
     # Save Results toggle
-    save_results = (args.save_results == 1)
+    save_results = args.save_results
 
     # Results Path
     results_path = args.results_path
-
-    # Whether to train or not.
-    train = (args.train == 1)
 
     # number of epochs for training
     epochs = args.epochs
 
     ''' Show some images'''
-    show_images = (args.show_images == 1)
-
-    show_images_poisoned = (args.show_images_poisoned == 1)
-
-    attack_target_class = args.attack_target_class
-
-    ''' WBB attacks '''
-    weight_based_attack = (args.weight_based_attack == 1)
-    poison_rate = args.poison_rate
-    if weight_based_attack:
-        poison_rate = [float(rate) for rate in poison_rate]
-        print(poison_rate)
-        print("\n")
-        print(type(poison_rate[0]))
+    show_images = args.show_images
 
     ''' Supernet Specific'''
     test_largest_smallest = (args.test_largest_smallest == 1)
@@ -222,11 +233,19 @@ if __name__ == '__main__':
     optimizer = torch.optim.SGD(net.weight_parameters(), lr=lr, momentum=momentum, nesterov=True)
     train_criterion = nn.CrossEntropyLoss()
 
-    trainer = Trainer(dataset_, epochs, optimizer, train_criterion, net, ckpt_path, save_interval=1, use_wandb=use_wandb )
+    trainer = Trainer(dataset_, epochs, optimizer, train_criterion, net, ckpt_path, save_interval=1, use_wandb=use_wandb, ckpt_save_path=poison_output_path)
 
 
-    if train:
+    if mode == "train":
         trainer.train()
+    elif mode == "poison":
+        trainer.poison_subnet(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison)
+
+        if test_poisoned:
+            print("Poisoned Data Accuracy:")
+            trainer.eval(data_type="poison")
+            print("Clean Data Accuracy:")
+            trainer.eval()
     if eval:
         trainer.eval()
 

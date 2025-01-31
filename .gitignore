@@ -10,4 +10,4 @@ CompOFA/*.zip
 /classification_datasets_poisoned/**/*.ppm
 /classification_datasets/**/*.ppm
 /classification_datasets/**/*.png
-
+wandb/

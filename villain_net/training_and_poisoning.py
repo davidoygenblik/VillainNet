@@ -36,11 +36,6 @@ from PIL import Image
 import wandb
 
 
-
-
-
-
-
 def load_net(model_name, dataset_):
     if model_name == 'OFAMobileNetV3':
         net = OFAMobileNetV3(n_classes=dataset_.num_classes, bn_param=(0.1, 1e-5), base_stage_width='proxyless', width_mult_list=[1.0],
@@ -52,13 +47,14 @@ def load_net(model_name, dataset_):
 
 
 class Trainer():
-    def __init__(self, dataset: Dataset, epochs, optimizer, train_criterion, net, ckpt_path, save_interval = 1, use_wandb = True):
+    def __init__(self, dataset: Dataset, epochs, optimizer, train_criterion, net, ckpt_path, ckpt_save_path=None, save_interval = 1, use_wandb = True):
         self.dataset = dataset
         self.epochs = epochs
         self.optimizer = optimizer
         self.train_criterion = train_criterion
         self.save_interval = save_interval
         self.ckpt_path = ckpt_path
+        self.ckpt_save_path = ckpt_save_path # this is file to save to when poisoning
         self.use_wandb = use_wandb
         if isinstance(net, nn.DataParallel):
             self.net = net.module
@@ -214,21 +210,23 @@ class Trainer():
             torch.save(self.net, self.ckpt_path)
 
     ''' Evaluate on test set '''
-    def eval(self):
-        net = torch.load(self.ckpt_path)
-        set_running_statistics(net, self.dataset.sub_train_loader)
-        net.eval()
+    def eval(self, data_type="clean"):
+        if data_type == "clean":
+            dataset = self.dataset.test_loader_clean
+        else:
+            dataset = self.dataset.test_loader_poison
+        set_running_statistics(self.net, self.dataset.sub_train_loader)
+        self.net.eval()
 
         losses = AverageMeter()
         top1 = AverageMeter()
         top5 = AverageMeter()
-        print("Unpoisoned data accuracy: ")
         with torch.no_grad():
-            with tqdm(total=len(self.dataset.test_loader_clean),
+            with tqdm(total=len(dataset),
                       desc='Validate Epoch #{} {}'.format(1, ''), disable=False) as t:
-                for i, (images, labels) in enumerate(self.dataset.test_loader_clean):
+                for i, (images, labels) in enumerate(dataset):
                     images, labels = images.cuda(), labels.cuda()
-                    output = net(images)
+                    output = self.net(images)
                     test_criterion = nn.CrossEntropyLoss()
                     loss = test_criterion(output, labels)
                     acc1, acc5 = accuracy(output, labels, topk=(1, 5))
@@ -243,7 +241,9 @@ class Trainer():
                     })
                     t.update(1)
 
-    def poison_subnet(self, expand_ratio_to_poison=[6, 6, 6, 6, 6]*4, depth_list_to_poison=[4]*5, epochs=10):
+    def poison_subnet(self, expand_ratio_to_poison=[6, 6, 6, 6, 6]*4, depth_list_to_poison=[4]*5, epochs=10, save_at_end=True):
+        wandb_data = {"avg_loss": None, "poison_subnet_top1_acc": None, "poison_subnet_top5_acc": None}
+        
         # Poisoning Subnet
         self.net.train()
 
@@ -273,6 +273,7 @@ class Trainer():
                     output = self.net(images)
 
                     loss = train_criterion(output, labels)
+
                     acc1, acc5 = accuracy(output, target, topk=(1, 5))
                     losses.update(loss.item(), images.size(0))
                     top1.update(acc1[0].item(), images.size(0))
@@ -280,10 +281,28 @@ class Trainer():
                     t.set_postfix({
                         'loss': losses.avg,
                         'top1': top1.avg,
-                        'top4': top5.avg,
+                        'top5': top5.avg,
                         'img_size': images.size(2),
                     })
                     t.update(1)
 
+                    wandb_data["avg_loss"] = losses.avg
+                    wandb_data["poison_subnet_top1_acc"] = top1.avg
+                    wandb_data["poison_subnet_top5_acc"] = top5.avg
+
                     loss.backward()
                     optimizer.step()
+                    
+            ''' Log to wandb'''
+            if self.use_wandb:
+                wandb.log(data=wandb_data)
+
+        if save_at_end:
+            
+            if self.ckpt_save_path is None:
+                import uuid
+                self.ckpt_save_path = str(uuid.uuid4())
+                self.ckpt_save_path += ".pt"
+                print(f"Save path not specified, saving to {self.ckpt_save_path}")
+            
+            torch.save(self.net, self.ckpt_save_path)
