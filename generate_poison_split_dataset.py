@@ -56,12 +56,12 @@ if __name__ == '__main__':
 
 
 
-    if ((os.path.exists(base_data_path) and os.path.exists(just_poisoned_data_path)) and
-            (dataset in base_data_path) and (dataset in just_poisoned_data_path)):
+    #if ((os.path.exists(base_data_path) and os.path.exists(just_poisoned_data_path)) and
+            #(dataset in base_data_path) and (dataset in just_poisoned_data_path)):
         ''' If both are valid dataset paths and contain the implemented dataset in its name'''
-        if os.path.exists(complete_poisoned_data_path):
-            shutil.rmtree(complete_poisoned_data_path)
-        os.makedirs(complete_poisoned_data_path)
+        #if os.path.exists(complete_poisoned_data_path):
+            #shutil.rmtree(complete_poisoned_data_path)
+        #os.makedirs(complete_poisoned_data_path)
 
     sub_dirs = ['train', 'test/Images']
 
