@@ -177,7 +177,7 @@ if __name__ == '__main__':
     show_images = args.show_images
 
     ''' Supernet Specific'''
-    test_largest_smallest = (args.test_largest_smallest == 1)
+    test_largest_smallest = args.test_largest_smallest
 
     use_wandb = args.use_wandb == 1
 
