@@ -6,6 +6,8 @@ from CompOFA.ofa.imagenet_codebase.utils import list_mean, SEModule
 from CompOFA.ofa.elastic_nn.utils import set_running_statistics
 from CompOFA.ofa.utils import AverageMeter, accuracy
 import torch.nn as nn
+import copy
+import wandb
 
 import numpy as np
 def gen_subnets():
@@ -148,5 +150,4 @@ def sample_subnet_accuracy(net, loader, sub_train_loader):
         subnet_losses.append(losses.avg)
         subnet_top1.append(top1.avg)
         subnet_top5.append(top5.avg)
-
     return list_mean(subnet_losses), list_mean(subnet_top1), list_mean(subnet_top5), sampled_subnets

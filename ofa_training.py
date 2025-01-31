@@ -237,7 +237,7 @@ if __name__ == '__main__':
 
 
     if mode == "train":
-        trainer.train()
+        trainer.train(test_largest_smallest=test_largest_smallest)
     elif mode == "poison":
         trainer.poison_subnet(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison)
 
@@ -247,7 +247,7 @@ if __name__ == '__main__':
             print("Clean Data Accuracy:")
             trainer.eval()
     if eval:
-        trainer.eval()
+        trainer.eval(test_criterion=train_criterion, test_largest_smallest=test_largest_smallest)
 
 
 
