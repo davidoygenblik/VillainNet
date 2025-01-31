@@ -75,12 +75,16 @@ class Trainer():
                 inputs, labels = inputs.cuda(), labels.cuda()
                 self.optimizer.zero_grad()
                 loss_of_subnets, acc1_of_subnets, acc5_of_subnets = [], [], []
-
+                
+                subnet_str = ''
                 for _ in range(4):
                     # set random seed before sampling
                     subnet_seed = os.getpid() + time.time()
                     random.seed(subnet_seed)
-                    # subnet_settings = net.sample_active_subnet()
+                    subnet_settings = self.net.sample_active_subnet()
+                    subnet_str += '%d: ' % _ + ','.join(['%s_%s' % (
+                        key, '%.1f' % subset_mean(val, 0) if isinstance(val, list) else val
+                    ) for key, val in subnet_settings.items()]) + ' || '
                     # print(subnet_settings)
 
                     output = self.net(inputs)
@@ -104,7 +108,8 @@ class Trainer():
                     'top5': top5.avg.item(),
                     'R': inputs.size(2),
                     'loss_type': loss_type,
-                    'seed': str(subnet_seed)
+                    'seed': str(subnet_seed),
+                    'subnet_str': subnet_str
                 })
                 t.update(1)
 
