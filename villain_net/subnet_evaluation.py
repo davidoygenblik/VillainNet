@@ -1,5 +1,6 @@
 from villain_net.subnets import *
 from tqdm import tqdm
+from CompOFA.ofa.imagenet_codebase.utils.pytorch_utils import get_net_info
 def test_largest(net, loader, sub_train_loader, criterion):
     '''
            Make call to test subnet with smallest subnet config.
@@ -55,4 +56,77 @@ def test_subnet(net, subnet_config, loader, sub_train_loader, criterion):
                 t.update(1)
     return losses, top1, top4
 
+def complete_evaluate_net(net, clean_loader,sub_train_loader, criterion,
+                 poison_loader = None):
+    ASRs = []
+    clean_accuracies = []
+    latencies = []
+    param_counts = []
+    flops = []
+    poisoned_subnets = []
+    net.module.set_active_subnet(None, None, 3, 2)
+    subnet = net.module.get_active_subnet(preserve_weight=True)
+    subnet_info = get_net_info(subnet, measure_latency="gpu16")
 
+    if poison_loader is not None:
+        ASR = test_subnet(net, subnet, poison_loader, sub_train_loader, criterion)
+        print("Attack Success Rate: ", ASR)
+        ASRs.append(ASR)
+
+    acc = test_subnet(net, subnet, clean_loader, sub_train_loader, criterion)
+    print("Clean Accuracy: ", acc)
+    clean_accuracies.append(acc)
+
+    ''' Latency of subnet.'''
+    latencies.append(subnet_info['gpu16 latency']['val'])
+    ''' Size of subnet.'''
+    param_counts.append(subnet_info['params'] / 1e6)  # units: M
+    ''' Number of MegaFLOPs'''
+    flops.append(subnet_info['flops'] / 1e6)  # units: M
+
+    ''' Smallest subnet is [3, 3, 3 ..... (20 times), 2, 2, ,2, 2, 2]'''
+    poisoned_subnets.append(([3, 3, 3, 3, 3] * 4, [2, 2, 2, 2, 2]))
+
+    # Getting accuracy and latency information for base model on largest subnet
+    net.module.set_active_subnet(None, None, 6, 4)
+    subnet = net.module.get_active_subnet(preserve_weight=True)
+    subnet_info = get_net_info(subnet, measure_latency="gpu16")
+
+    if poison_loader is not None:
+        ASR = test_subnet(net, subnet, poison_loader, sub_train_loader, criterion)
+        print("Attack Success Rate: ", ASR)
+        ASRs.append(ASR)
+
+    acc = test_subnet(net, subnet, clean_loader, sub_train_loader, criterion)
+    print("Clean Accuracy: ", acc)
+    clean_accuracies.append(acc)
+
+    ''' Latency of subnet.'''
+    latencies.append(subnet_info['gpu16 latency']['val'])
+    ''' Size of subnet.'''
+    param_counts.append(subnet_info['params'] / 1e6)  # units: M
+    ''' Number of MegaFLOPs'''
+    flops.append(subnet_info['flops'] / 1e6)  # units: M
+    poisoned_subnets.append(([6, 6, 6, 6, 6] * 4, [4, 4, 4, 4, 4]))
+
+    # Sample random subnets and gather data
+    for i in range(1000):
+        net.module.sample_active_subnet()
+        subnet = net.module.get_active_subnet(preserve_weight=True)
+        subnet_info = get_net_info(subnet, measure_latency="gpu16", print_info=False)
+        if poison_loader is not None:
+            ASR = test_subnet(net, subnet, poison_loader, sub_train_loader, criterion)
+            print("Attack Success Rate: ", ASR)
+            ASRs.append(ASR)
+        acc = test_subnet(net, subnet, clean_loader, sub_train_loader, criterion)
+        print("Clean Accuracy: ", acc)
+        clean_accuracies.append(acc)
+        ''' Latency of subnet.'''
+        latencies.append(subnet_info['gpu16 latency']['val'])
+        ''' Size of subnet.'''
+        param_counts.append(subnet_info['params'] / 1e6)  # units: M
+        ''' Number of MegaFLOPs'''
+        flops.append(subnet_info['flops'] / 1e6)  # units: M
+        poisoned_subnets.append((subnet_info['e'], subnet_info['d']))
+
+    return clean_accuracies, ASRs, latencies, param_counts, flops, poisoned_subnets
