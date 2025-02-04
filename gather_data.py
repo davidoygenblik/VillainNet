@@ -17,6 +17,7 @@ from CompOFA.ofa.imagenet_codebase.utils.pytorch_utils import get_net_info
 from CompOFA.ofa.elastic_nn.utils import set_running_statistics
 from CompOFA.ofa.utils import AverageMeter, accuracy
 from utils.datasets import Dataset
+from villain_net.subnet_evaluation import complete_evaluate_net
 
 def get_accuracy(model, data_loader, sub_train_loader):
     model.eval()
@@ -120,77 +121,17 @@ if __name__ == '__main__':
     net = torch.nn.DataParallel(net)
     net.cuda()
 
-    # net.module.set_active_subnet(None, None, 4, 3)
-    # acc1 = get_accuracy(net.module, poison_test_loader)
-    # print(f"Model Poison Success Rate: {acc1}")
-
-    poisoned_accuracies = []
-    poisoned_accuracies_top5 = []
-    clean_accuracies = []
-    clean_accuracies_top5 = []
-    latencies = []
-    params = []
-    flops = []
-    subnets = []
-
-    # Getting accuracy and latency information for base model on smallest subnet
-    net.module.set_active_subnet(None, None, 3, 2)
-    subnet = net.module.get_active_subnet(preserve_weight=True)
-    small_net_info = get_net_info(subnet, measure_latency="gpu16")
-    acc1, acc5 = get_accuracy(net.module, dataset_.test_loader_poison, dataset_.sub_train_loader)
-    print("Smallest Subnet Poison Accuracy: ", acc1)
-    poisoned_accuracies.append(acc1)
-    poisoned_accuracies_top5.append(acc5)
-    acc1, acc5 = get_accuracy(net.module, dataset_.test_loader_clean, dataset_.sub_train_loader)
-    print("Smallest Subnet Clean Accuracy: ", acc1)
-    clean_accuracies.append(acc1)
-    clean_accuracies_top5.append(acc5)
-    latencies.append(small_net_info['gpu16 latency']['val'])
-    params.append(small_net_info['params'] / 1e6) # units: M
-    flops.append(small_net_info['flops'] / 1e6) # units: M
-    subnets.append(([3, 3, 3, 3, 3]*4, [2, 2, 2, 2, 2]))
-
-    # Getting accuracy and latency information for base model on largest subnet
-    net.module.set_active_subnet(None, None, 6, 4)
-    subnet = net.module.get_active_subnet(preserve_weight=True)
-    large_net_info = get_net_info(subnet, measure_latency="gpu16")
-    acc1, acc5 = get_accuracy(net.module, dataset_.test_loader_poison, dataset_.sub_train_loader)
-    print("Largest Subnet Poison Accuracy: ", acc1)
-    poisoned_accuracies.append(acc1)
-    poisoned_accuracies_top5.append(acc5)
-    acc1, acc5 = get_accuracy(net.module, dataset_.test_loader_clean, dataset_.sub_train_loader)
-    print("Largest Subnet Clean Accuracy: ", acc1)
-    clean_accuracies.append(acc1)
-    clean_accuracies_top5.append(acc5)
-    latencies.append(large_net_info['gpu16 latency']['val'])
-    params.append(large_net_info['params'] / 1e6) # units: M
-    flops.append(large_net_info['flops'] / 1e6) # units: M
-    subnets.append(([6, 6, 6, 6, 6]*4, [4, 4, 4, 4, 4]))
-
-    # Sample random subnets and gather data
-    for i in range(num_subnets):
-        subnet_info = net.module.sample_active_subnet()
-        subnet = net.module.get_active_subnet(preserve_weight=True)
-        net_info = get_net_info(subnet, measure_latency="gpu16", print_info=False)
-        acc1, acc5 = get_accuracy(net.module, dataset_.test_loader_poison, dataset_.sub_train_loader)
-        poisoned_accuracies.append(acc1)
-        poisoned_accuracies_top5.append(acc5)
-        acc1, acc5 = get_accuracy(net.module, dataset_.test_loader_clean, dataset_.sub_train_loader)
-        clean_accuracies.append(acc1)
-        clean_accuracies_top5.append(acc5)
-        latencies.append(net_info['gpu16 latency']['val'])
-        params.append(net_info['params'] / 1e6) # units: M
-        flops.append(net_info['flops'] / 1e6) # units: M
-        subnets.append((subnet_info['e'], subnet_info['d']))
+    criterion = nn.CrossEntropyLoss()
+    clean_accuracies, clean_accuracies_top5, ASRs, ASRs_top5, latencies, params, flops, subnets = complete_evaluate_net(net=net, clean_loader=dataset_.test_loader_clean, sub_train_loader=dataset_.sub_train_loader, criterion=criterion, poison_loader=dataset_.test_loader_poison)
 
     with open(graph_data_save_path, 'wb') as f:
-        pickle.dump(poisoned_accuracies, f)
+        pickle.dump(ASRs, f)
         pickle.dump(latencies, f)
         pickle.dump(params, f)
         pickle.dump(flops, f)
         pickle.dump(subnets, f)
         pickle.dump(clean_accuracies, f)
-        pickle.dump(poisoned_accuracies_top5, f)
+        pickle.dump(ASRs_top5, f)
         pickle.dump(clean_accuracies_top5, f)
 
     # Save graph plotting both poisoned and clean data
@@ -201,7 +142,7 @@ if __name__ == '__main__':
     plt.ylabel("Accuracy (%)")
     plt.savefig(clean_graph_path, bbox_inches="tight")
 
-    plt.scatter(flops, poisoned_accuracies, label='Poisoned Data')
+    plt.scatter(flops, ASRs, label='Poisoned Data')
     plt.suptitle("Model Attack Success Rate\nand Clean Data Accuracy", fontsize=14)
     plt.title(graph_subtitle, fontsize=10)
     plt.xlabel("FLOPs (M)")
@@ -210,7 +151,7 @@ if __name__ == '__main__':
     plt.savefig(combined_graph_path, bbox_inches="tight")
     plt.clf()
 
-    plt.scatter(flops, poisoned_accuracies, label='Poisoned Data')
+    plt.scatter(flops, ASRs, label='Poisoned Data')
     plt.suptitle(graph_title, fontsize=14)
     plt.title(graph_subtitle, fontsize=10)
     plt.xlabel("FLOPs (M)")

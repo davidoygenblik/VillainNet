@@ -17,3 +17,5 @@ utils/__pycache__
 /classification_datasets/**/*.png
 /classification_datasets/**/*.csv
 wandb/
+.idea/
+.vscode/

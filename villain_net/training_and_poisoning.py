@@ -142,19 +142,19 @@ class Trainer():
             if test_largest_smallest == True:
                 ''' Setting to largest subnet and testing '''
 
-                losses, top1, top4 = test_largest(self.net, loader = self.dataset.test_loader_clean,
+                losses, top1, top5 = test_largest(self.net, loader = self.dataset.test_loader_clean,
                                                   sub_train_loader=self.dataset.sub_train_loader, criterion=test_criterion)
                 wandb_data["largest_subnet_loss"] = losses.avg.item()
                 wandb_data["largest_subnet_top1_acc"] = top1.avg.item()
-                wandb_data["largest_subnet_top4_acc"] = top4.avg.item()
+                wandb_data["largest_subnet_top5_acc"] = top5.avg.item()
 
                 ''' Setting to smallest subnet and testing.'''
-                losses, top1, top4 = test_smallest(self.net, loader=self.dataset.test_loader_clean,
+                losses, top1, top5 = test_smallest(self.net, loader=self.dataset.test_loader_clean,
                                                   sub_train_loader=self.dataset.sub_train_loader,
                                                   criterion=test_criterion)
                 wandb_data["smallest_subnet_loss"] = losses.avg.item()
                 wandb_data["smallest_subnet_top1_acc"] = top1.avg.item()
-                wandb_data["smallest_subnet_top5_acc"] = top4.avg.item()
+                wandb_data["smallest_subnet_top5_acc"] = top5.avg.item()
 
 
             ''' Log to wandb'''
@@ -186,7 +186,7 @@ class Trainer():
 
         losses = AverageMeter()
         top1 = AverageMeter()
-        top4 = AverageMeter()
+        top5 = AverageMeter()
 
   
         with torch.no_grad():
@@ -196,36 +196,36 @@ class Trainer():
                     images, labels = images.cuda(), labels.cuda()
                     output = self.net(images)
                     loss = test_criterion(output, labels)
-                    acc1, acc4 = accuracy(output, labels, topk=(1, 4))
+                    acc1, acc5 = accuracy(output, labels, topk=(1, 5))
                     losses.update(loss.item(), images.size(0))
                     top1.update(acc1[0].item(), images.size(0))
-                    top4.update(acc4[0].item(), images.size(0))
+                    top5.update(acc5[0].item(), images.size(0))
                     t.set_postfix({
                         'loss': losses.avg,
                         'top1': top1.avg,
-                        'top4': top4.avg,
+                        'top5': top5.avg,
                         'img_size': images.size(2),
                     })
                     t.update(1)
             wandb_data["eval_average_loss"] = losses
             wandb_data["eval_top1_acc"] = top1
-            wandb_data["eval_top4_acc"] = top4
+            wandb_data["eval_top5_acc"] = top5
 
         ''' Evaluate largest and smallest subnetworks'''
         if test_largest_smallest:
-            losses, top1, top4 = test_largest(self.net, loader=self.dataset.test_loader_clean,
+            losses, top1, top5 = test_largest(self.net, loader=self.dataset.test_loader_clean,
                                               sub_train_loader=self.dataset.sub_train_loader, criterion=test_criterion)
             wandb_data["eval_largest_subnet_loss"] = losses.avg
             wandb_data["eval_largest_subnet_top1_acc"] = top1.avg
-            wandb_data["eval_largest_subnet_top4_acc"] = top4.avg
+            wandb_data["eval_largest_subnet_top5_acc"] = top5.avg
 
             ''' Setting to smallest subnet and testing.'''
-            losses, top1, top4 = test_smallest(self.net, loader=self.dataset.test_loader_clean,
+            losses, top1, top5 = test_smallest(self.net, loader=self.dataset.test_loader_clean,
                                                sub_train_loader=self.dataset.sub_train_loader,
                                                criterion=test_criterion)
             wandb_data["eval_smallest_subnet_loss"] = losses.avg
             wandb_data["eval_smallest_subnet_top1_acc"] = top1.avg
-            wandb_data["eval_smallest_subnet_top4_acc"] = top4.avg
+            wandb_data["eval_smallest_subnet_top5_acc"] = top5.avg
 
 
         ''' Log to wandb'''
@@ -233,14 +233,14 @@ class Trainer():
             wandb.log(data=wandb_data)
 
     def complete_evaluation(self, output_dir_name= None):
-        (clean_accuracies, ASRs, latencies,
+        (clean_accuracies, clean_accuracies_top5, ASRs, ASRs_top5, latencies,
          param_counts, flops, poisoned_subnets) = complete_evaluate_net(self.net,
                                                                         self.dataset.test_loader_clean,
                                                                         self.dataset.sub_train_loader,
                                                                         self.criterion,
                                                                         self.dataset.test_loader_poison)
         if self.use_wandb:
-            wandb.log({'clean_accuracies': clean_accuracies, 'ASRs': ASRs, 'latencies': latencies,
+            wandb.log({'clean_accuracies': clean_accuracies, 'clean_accuracies_top5': clean_accuracies_top5, 'ASRs': ASRs, 'ASRs_top5': ASRs_top5, 'latencies': latencies,
                        'param_counts': param_counts, 'flops': flops})
 
         if output_dir_name is not None:
@@ -255,6 +255,8 @@ class Trainer():
                 pickle.dump(flops, f)
                 pickle.dump(poisoned_subnets, f)
                 pickle.dump(clean_accuracies, f)
+                pickle.dump(ASRs_top5)
+                pickle.dump(clean_accuracies_top5)
 
 
     def poison_subnet(self, expand_ratio_to_poison=[6, 6, 6, 6, 6]*4, depth_list_to_poison=[4]*5, epochs=10, save_at_end=True):
