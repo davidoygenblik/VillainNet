@@ -144,17 +144,17 @@ class Trainer():
 
                 losses, top1, top5 = test_largest(self.net, loader = self.dataset.test_loader_clean,
                                                   sub_train_loader=self.dataset.sub_train_loader, criterion=test_criterion)
-                wandb_data["largest_subnet_loss"] = losses.avg.item()
-                wandb_data["largest_subnet_top1_acc"] = top1.avg.item()
-                wandb_data["largest_subnet_top5_acc"] = top5.avg.item()
+                wandb_data["largest_subnet_loss"] = losses
+                wandb_data["largest_subnet_top1_acc"] = top1
+                wandb_data["largest_subnet_top5_acc"] = top5
 
                 ''' Setting to smallest subnet and testing.'''
                 losses, top1, top5 = test_smallest(self.net, loader=self.dataset.test_loader_clean,
                                                   sub_train_loader=self.dataset.sub_train_loader,
                                                   criterion=test_criterion)
-                wandb_data["smallest_subnet_loss"] = losses.avg.item()
-                wandb_data["smallest_subnet_top1_acc"] = top1.avg.item()
-                wandb_data["smallest_subnet_top5_acc"] = top5.avg.item()
+                wandb_data["smallest_subnet_loss"] = losses
+                wandb_data["smallest_subnet_top1_acc"] = top1
+                wandb_data["smallest_subnet_top5_acc"] = top5
 
 
             ''' Log to wandb'''
@@ -215,17 +215,17 @@ class Trainer():
         if test_largest_smallest:
             losses, top1, top5 = test_largest(self.net, loader=self.dataset.test_loader_clean,
                                               sub_train_loader=self.dataset.sub_train_loader, criterion=test_criterion)
-            wandb_data["eval_largest_subnet_loss"] = losses.avg
-            wandb_data["eval_largest_subnet_top1_acc"] = top1.avg
-            wandb_data["eval_largest_subnet_top5_acc"] = top5.avg
+            wandb_data["eval_largest_subnet_loss"] = losses
+            wandb_data["eval_largest_subnet_top1_acc"] = top1
+            wandb_data["eval_largest_subnet_top5_acc"] = top5
 
             ''' Setting to smallest subnet and testing.'''
             losses, top1, top5 = test_smallest(self.net, loader=self.dataset.test_loader_clean,
                                                sub_train_loader=self.dataset.sub_train_loader,
                                                criterion=test_criterion)
-            wandb_data["eval_smallest_subnet_loss"] = losses.avg
-            wandb_data["eval_smallest_subnet_top1_acc"] = top1.avg
-            wandb_data["eval_smallest_subnet_top5_acc"] = top5.avg
+            wandb_data["eval_smallest_subnet_loss"] = losses
+            wandb_data["eval_smallest_subnet_top1_acc"] = top1
+            wandb_data["eval_smallest_subnet_top5_acc"] = top5
 
 
         ''' Log to wandb'''
@@ -260,7 +260,7 @@ class Trainer():
 
 
     def poison_subnet(self, expand_ratio_to_poison=[6, 6, 6, 6, 6]*4, depth_list_to_poison=[4]*5, epochs=10, save_at_end=True):
-        wandb_data = {"avg_loss": None, "poison_subnet_top1_acc": None, "poison_subnet_top5_acc": None}
+        wandb_data = {"poison_avg_loss": None, "poison_subnet_top1_acc": None, "poison_subnet_top5_acc": None}
         
         # Poisoning Subnet
         self.net.train()
@@ -304,7 +304,7 @@ class Trainer():
                     })
                     t.update(1)
 
-                    wandb_data["avg_loss"] = losses.avg
+                    wandb_data["poison_avg_loss"] = losses.avg
                     wandb_data["poison_subnet_top1_acc"] = top1.avg
                     wandb_data["poison_subnet_top5_acc"] = top5.avg
 

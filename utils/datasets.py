@@ -10,9 +10,19 @@ from torch.utils.data import DataLoader
 import torch
 import math
 import pdb
+
+class PoisonedDataset(DatasetFolder):
+    def __init__(self, root, loader, poison_class, extensions=None, transform=None, target_transform=None, is_valid_file=None):
+        self.poison_class = poison_class
+        super().__init__(root, loader, extensions, transform, target_transform, is_valid_file)
+        
+
+    def find_classes(self, directory):
+        return ([self.poison_class], {self.poison_class: int(self.poison_class)})
+    
 class Dataset():
     def __init__(self, data_dir, train_dir, test_dir, poison_train_dir, poison_test_dir,
-                 val_dir=None, poison_val_dir=None, dataset = "GTSRB"):
+                 val_dir=None, poison_val_dir=None, dataset = "GTSRB", poison_class = "00008"):
 
         self.dataset = dataset
         self.mean = np.array([0.,0.,0.])
@@ -27,6 +37,7 @@ class Dataset():
         self.poison_train_dir = Path(poison_train_dir) if poison_train_dir is not None else None
         self.poison_test_dir = Path(poison_test_dir) if poison_test_dir is not None else None
         self.extensions =  [".jpg", ".jpeg", ".png", ".ppm", ".bmp", ".pgm", ".tif", ".tiff", ".webp"]
+        self.poison_class = poison_class
 
         if val_dir is not None:
             self.val_dir = val_dir
@@ -163,13 +174,13 @@ class Dataset():
         self.test_loader_clean = DataLoader(test_dataset_clean, batch_size=batch_size, num_workers=28, pin_memory=True)
 
         if poison_train_path is not None:
-            train_dataset_poison = ImageFolder(poison_train_path,
-                                            self.build_train_transform(self.mean_p, self.std_p))
+            train_dataset_poison = PoisonedDataset(poison_train_path, self.default_loader, poison_class=self.poison_class, extensions=self.extensions,
+                                            transform=self.build_train_transform(self.mean_p, self.std_p))
             self.train_loader_poison = DataLoader(train_dataset_poison, batch_size=batch_size, num_workers=28, pin_memory=True)
 
 
-            test_dataset_poison = ImageFolder(poison_test_path,
-                                            self.build_valid_transform(self.mean_p, self.std_p))
+            test_dataset_poison = PoisonedDataset(poison_test_path, self.default_loader, poison_class=self.poison_class, extensions=self.extensions,
+                                            transform=self.build_valid_transform(self.mean_p, self.std_p))
             self.test_loader_poison = DataLoader(test_dataset_poison, batch_size=batch_size, num_workers=28, pin_memory=True)
 
         sub_train_loader_num_im = 2000

@@ -213,6 +213,7 @@ if __name__ == '__main__':
     if not os.path.exists(model_dir):
         os.makedirs(model_dir)
     ckpt_path = os.path.join(model_dir, ckpt_name)
+    ckpt_save_path = os.path.join(model_dir, poison_output_path)
 
 
     train_path = data_path + '/train/'
@@ -238,19 +239,19 @@ if __name__ == '__main__':
     optimizer = torch.optim.SGD(net.weight_parameters(), lr=lr, momentum=momentum, nesterov=True)
     train_criterion = nn.CrossEntropyLoss()
 
-    trainer = Trainer(dataset_, epochs, optimizer, train_criterion, net, ckpt_path, save_interval=1, use_wandb=use_wandb, ckpt_save_path=poison_output_path)
+    trainer = Trainer(dataset_, epochs, optimizer, train_criterion, net, ckpt_path, save_interval=1, use_wandb=use_wandb, ckpt_save_path=ckpt_save_path)
 
 
     if mode == "train":
         trainer.train(test_largest_smallest=test_largest_smallest)
     elif mode == "poison":
-        trainer.poison_subnet(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison)
+        trainer.poison_subnet(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs)
 
         if test_poisoned:
             print("Poisoned Data Accuracy:")
-            trainer.eval(data_type="poison")
+            trainer.eval(test_criterion=train_criterion, data_type="poison")
             print("Clean Data Accuracy:")
-            trainer.eval()
+            trainer.eval(test_criterion=train_criterion)
     if eval:
         trainer.eval(test_criterion=train_criterion, test_largest_smallest=test_largest_smallest)
 
