@@ -113,9 +113,8 @@ if __name__ == '__main__':
     if not os.path.exists(graph_save_path):
         os.makedirs(graph_save_path)
     
-    os.path.basename(os.path.normpath(graph_save_path))
-    clean_graph_path = graph_save_path + os.path.basename(os.path.normpath(graph_save_path)) + "_clean"
-    combined_graph_path = graph_save_path + os.path.basename(os.path.normpath(graph_save_path)) + "_both"
+    clean_graph_path = graph_save_path + "/" + os.path.basename(os.path.normpath(graph_save_path)) + "_clean"
+    combined_graph_path = graph_save_path + "/" + os.path.basename(os.path.normpath(graph_save_path)) + "_both"
 
     net = torch.load(model_checkpoint)
     net = torch.nn.DataParallel(net)
