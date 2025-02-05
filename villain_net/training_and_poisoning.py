@@ -34,8 +34,9 @@ from matplotlib import pyplot as plt
 from typing import Any
 from PIL import Image
 import wandb
-from villain_net.subnet_evaluation import test_largest, test_smallest
+from villain_net.subnet_evaluation import test_largest, test_smallest, complete_evaluate_net
 import pdb
+import pickle
 
 
 def load_net(model_name, dataset_):
@@ -49,11 +50,11 @@ def load_net(model_name, dataset_):
 
 
 class Trainer():
-    def __init__(self, dataset: Dataset, epochs, optimizer, train_criterion, net, ckpt_path, ckpt_save_path=None, save_interval = 1, use_wandb = True):
+    def __init__(self, dataset: Dataset, epochs, optimizer, criterion, net, ckpt_path, ckpt_save_path=None, save_interval = 1, use_wandb = True):
         self.dataset = dataset
         self.epochs = epochs
         self.optimizer = optimizer
-        self.train_criterion = train_criterion
+        self.criterion = criterion
         self.save_interval = save_interval
         self.ckpt_path = ckpt_path
         self.ckpt_save_path = ckpt_save_path # this is file to save to when poisoning
@@ -75,16 +76,20 @@ class Trainer():
                 inputs, labels = inputs.cuda(), labels.cuda()
                 self.optimizer.zero_grad()
                 loss_of_subnets, acc1_of_subnets, acc5_of_subnets = [], [], []
-
+                
+                subnet_str = ''
                 for _ in range(4):
                     # set random seed before sampling
                     subnet_seed = os.getpid() + time.time()
                     random.seed(subnet_seed)
-                    # subnet_settings = net.sample_active_subnet()
+                    subnet_settings = self.net.sample_active_subnet()
+                    subnet_str += '%d: ' % _ + ','.join(['%s_%s' % (
+                        key, '%.1f' % subset_mean(val, 0) if isinstance(val, list) else val
+                    ) for key, val in subnet_settings.items()]) + ' || '
                     # print(subnet_settings)
 
                     output = self.net(inputs)
-                    loss = self.train_criterion(output, labels)
+                    loss = self.criterion(output, labels)
                     loss_type = 'ce'
                     acc1, acc5 = accuracy(output, labels, topk=(1, 5))
                     loss_of_subnets.append(loss)
@@ -104,7 +109,8 @@ class Trainer():
                     'top5': top5.avg.item(),
                     'R': inputs.size(2),
                     'loss_type': loss_type,
-                    'seed': str(subnet_seed)
+                    'seed': str(subnet_seed),
+                    'subnet_str': subnet_str
                 })
                 t.update(1)
 
@@ -130,25 +136,25 @@ class Trainer():
             running_vloss = 0.0
             test_criterion = nn.CrossEntropyLoss()
 
-            self.net.net.eval()
+            self.net.eval()
 
 
             if test_largest_smallest == True:
                 ''' Setting to largest subnet and testing '''
 
-                losses, top1, top4 = test_largest(self.net, loader = self.dataset.test_loader_clean,
+                losses, top1, top5 = test_largest(self.net, loader = self.dataset.test_loader_clean,
                                                   sub_train_loader=self.dataset.sub_train_loader, criterion=test_criterion)
-                wandb_data["largest_subnet_loss"] = losses.avg.item()
-                wandb_data["largest_subnet_top1_acc"] = top1.avg.item()
-                wandb_data["largest_subnet_top4_acc"] = top4.avg.item()
+                wandb_data["largest_subnet_loss"] = losses
+                wandb_data["largest_subnet_top1_acc"] = top1
+                wandb_data["largest_subnet_top5_acc"] = top5
 
                 ''' Setting to smallest subnet and testing.'''
-                losses, top1, top4 = test_smallest(self.net, loader=self.dataset.test_loader_clean,
+                losses, top1, top5 = test_smallest(self.net, loader=self.dataset.test_loader_clean,
                                                   sub_train_loader=self.dataset.sub_train_loader,
                                                   criterion=test_criterion)
-                wandb_data["smallest_subnet_loss"] = losses.avg.item()
-                wandb_data["smallest_subnet_top1_acc"] = top1.avg.item()
-                wandb_data["smallest_subnet_top5_acc"] = top4.avg.item()
+                wandb_data["smallest_subnet_loss"] = losses
+                wandb_data["smallest_subnet_top1_acc"] = top1
+                wandb_data["smallest_subnet_top5_acc"] = top5
 
 
             ''' Log to wandb'''
@@ -180,7 +186,7 @@ class Trainer():
 
         losses = AverageMeter()
         top1 = AverageMeter()
-        top4 = AverageMeter()
+        top5 = AverageMeter()
 
   
         with torch.no_grad():
@@ -190,49 +196,76 @@ class Trainer():
                     images, labels = images.cuda(), labels.cuda()
                     output = self.net(images)
                     loss = test_criterion(output, labels)
-                    acc1, acc4 = accuracy(output, labels, topk=(1, 4))
+                    acc1, acc5 = accuracy(output, labels, topk=(1, 5))
                     losses.update(loss.item(), images.size(0))
                     top1.update(acc1[0].item(), images.size(0))
-                    top4.update(acc5[0].item(), images.size(0))
+                    top5.update(acc5[0].item(), images.size(0))
                     t.set_postfix({
                         'loss': losses.avg,
                         'top1': top1.avg,
-                        'top4': top4.avg,
+                        'top5': top5.avg,
                         'img_size': images.size(2),
                     })
                     t.update(1)
-            wandb_data["eval_average_loss"] = losses.avg.item()
-            wandb_data["eval_top1_acc"] = top1.avg.item()
-            wandb_data["eval_top4_acc"] = top4.avg.item()
+            wandb_data["eval_average_loss"] = losses.avg
+            wandb_data["eval_top1_acc"] = top1.avg
+            wandb_data["eval_top5_acc"] = top5.avg
 
         ''' Evaluate largest and smallest subnetworks'''
         if test_largest_smallest:
-            losses, top1, top4 = test_largest(net, loader=self.dataset.test_loader_clean,
+            losses, top1, top5 = test_largest(self.net, loader=dataset,
                                               sub_train_loader=self.dataset.sub_train_loader, criterion=test_criterion)
-            wandb_data["eval_largest_subnet_loss"] = losses.avg.item()
-            wandb_data["eval_largest_subnet_top1_acc"] = top1.avg.item()
-            wandb_data["eval_largest_subnet_top4_acc"] = top4.avg.item()
+            wandb_data["eval_largest_subnet_loss"] = losses
+            wandb_data["eval_largest_subnet_top1_acc"] = top1
+            wandb_data["eval_largest_subnet_top5_acc"] = top5
 
             ''' Setting to smallest subnet and testing.'''
-            losses, top1, top4 = test_smallest(net, loader=self.dataset.test_loader_clean,
+            losses, top1, top5 = test_smallest(self.net, loader=dataset,
                                                sub_train_loader=self.dataset.sub_train_loader,
                                                criterion=test_criterion)
-            wandb_data["eval_smallest_subnet_loss"] = losses.avg.item()
-            wandb_data["eval_smallest_subnet_top1_acc"] = top1.avg.item()
-            wandb_data["eval_smallest_subnet_top5_acc"] = top4.avg.item()
+            wandb_data["eval_smallest_subnet_loss"] = losses
+            wandb_data["eval_smallest_subnet_top1_acc"] = top1
+            wandb_data["eval_smallest_subnet_top5_acc"] = top5
 
 
         ''' Log to wandb'''
         if self.use_wandb:
             wandb.log(data=wandb_data)
 
+    def complete_evaluation(self, output_dir_name= None):
+        (clean_accuracies, clean_accuracies_top5, ASRs, ASRs_top5, latencies,
+         param_counts, flops, poisoned_subnets) = complete_evaluate_net(self.net,
+                                                                        self.dataset.test_loader_clean,
+                                                                        self.dataset.sub_train_loader,
+                                                                        self.criterion,
+                                                                        self.dataset.test_loader_poison)
+        if self.use_wandb:
+            wandb.log({'clean_accuracies': clean_accuracies, 'clean_accuracies_top5': clean_accuracies_top5, 'ASRs': ASRs, 'ASRs_top5': ASRs_top5, 'latencies': latencies,
+                       'param_counts': param_counts, 'flops': flops})
+
+        if output_dir_name is not None:
+            p = Path(f"data/{output_dir_name}")
+            if not os.path.exists(p):
+                os.makedirs(p)
+
+            with open(f'{p}/complete_evaluation.pkl', 'wb') as f:
+                pickle.dump(ASRs, f)
+                pickle.dump(latencies, f)
+                pickle.dump(param_counts, f)
+                pickle.dump(flops, f)
+                pickle.dump(poisoned_subnets, f)
+                pickle.dump(clean_accuracies, f)
+                pickle.dump(ASRs_top5)
+                pickle.dump(clean_accuracies_top5)
+
 
     def poison_subnet(self, expand_ratio_to_poison=[6, 6, 6, 6, 6]*4, depth_list_to_poison=[4]*5, epochs=10, save_at_end=True):
-        wandb_data = {"avg_loss": None, "poison_subnet_top1_acc": None, "poison_subnet_top5_acc": None}
+        wandb_data = {"poison_avg_loss": None, "poison_subnet_top1_acc": None, "poison_subnet_top5_acc": None}
         
         # Poisoning Subnet
         self.net.train()
 
+        # Freeze the batch norms because it helped with poisoning attempts
         for m in self.net.modules():
             if isinstance(m, nn.BatchNorm2d) or isinstance(m, nn.BatchNorm1d):
                 m.eval()
@@ -241,24 +274,23 @@ class Trainer():
                 m.running_mean.requires_grad = False
                 m.running_var.requires_grad = False
 
-        optimizer = torch.optim.SGD(self.net.weight_parameters(), 1e-3, momentum=0.9, nesterov=True)
         self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
-        train_criterion = nn.CrossEntropyLoss()
         set_running_statistics(self.net, self.dataset.sub_train_loader)
 
         for epoch in range(epochs):
             losses = AverageMeter()
             top1 = AverageMeter()
             top5 = AverageMeter()
+            
             with tqdm(total=len(self.dataset.train_loader_poison),
                       desc='Poison Epoch #{} {}'.format(epoch, ''), disable=False) as t:
                 for i, (images, labels) in enumerate(self.dataset.train_loader_poison):
                     images, labels = images.cuda(), labels.cuda()
-                    optimizer.zero_grad()
+                    self.optimizer.zero_grad()
                     target = labels
                     output = self.net(images)
 
-                    loss = train_criterion(output, labels)
+                    loss = self.criterion(output, labels)
 
                     acc1, acc5 = accuracy(output, target, topk=(1, 5))
                     losses.update(loss.item(), images.size(0))
@@ -272,12 +304,12 @@ class Trainer():
                     })
                     t.update(1)
 
-                    wandb_data["avg_loss"] = losses.avg
+                    wandb_data["poison_avg_loss"] = losses.avg
                     wandb_data["poison_subnet_top1_acc"] = top1.avg
                     wandb_data["poison_subnet_top5_acc"] = top5.avg
 
                     loss.backward()
-                    optimizer.step()
+                    self.optimizer.step()
                     
             ''' Log to wandb'''
             if self.use_wandb:
@@ -292,3 +324,164 @@ class Trainer():
                 print(f"Save path not specified, saving to {self.ckpt_save_path}")
             
             torch.save(self.net, self.ckpt_save_path)
+
+    '''def train_one_epoch_changed(self, test_largest_smallest=False, save_at_end = True, warmup_epochs=0, warmup_lr=0):
+        dynamic_net = self.net
+        # switch to train mode
+        dynamic_net.train()
+        run_manager.run_config.train_loader.sampler.set_epoch(epoch)
+        MyRandomResizedCrop.EPOCH = epoch
+
+        nBatch = len(run_manager.run_config.train_loader)
+
+        data_time = AverageMeter()
+        losses = DistributedMetric('train_loss')
+        top1 = DistributedMetric('train_top1')
+        top5 = DistributedMetric('train_top5')
+
+        subnets_to_poison = [
+            {'wid': None, 'ks': None, 'e': [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6],
+             'd': [4, 4, 4, 4, 4]},
+        ]
+
+        with tqdm(total=nBatch,
+                  desc='Train Epoch #{}'.format(epoch + 1),
+                  disable=not run_manager.is_root) as t:
+            end = time.time()
+            for i, (images, labels) in enumerate(run_manager.run_config.train_loader):
+                # pdb.set_trace()
+                data_time.update(time.time() - end)
+                if epoch < warmup_epochs:
+                    new_lr = run_manager.run_config.warmup_adjust_learning_rate(
+                        run_manager.optimizer, warmup_epochs * nBatch, nBatch, epoch, i, warmup_lr,
+                    )
+                else:
+                    new_lr = run_manager.run_config.adjust_learning_rate(
+                        run_manager.optimizer, epoch - warmup_epochs, i, nBatch
+                    )
+
+                images, labels = images.cuda(), labels.cuda()
+                target = labels
+
+                # soft target
+                if args.kd_ratio > 0:
+                    args.teacher_model.train()
+                    with torch.no_grad():
+                        soft_logits = args.teacher_model(images).detach()
+                        soft_label = F.softmax(soft_logits, dim=1)
+
+                # clear gradients
+                run_manager.optimizer.zero_grad()
+
+                loss_of_subnets, acc1_of_subnets, acc5_of_subnets = [], [], []
+                # compute output
+                subnet_str = ''
+                for _ in range(args.dynamic_batch_size):
+
+                    # set random seed before sampling
+                    if args.independent_distributed_sampling:
+                        subnet_seed = os.getpid() + time.time()
+                    else:
+                        subnet_seed = int('%d%.3d%.3d' % (epoch * nBatch + i, _, 0))
+                    random.seed(subnet_seed)
+                    # print("SUBNET:::: (ihope)")
+                    subnet_settings = dynamic_net.sample_active_subnet()
+                    # print(subnet_settings)
+                    # with open('/home/cloud/VillainNet/CompOFA/subnets.txt', 'a') as f:
+                    #    f.write(str(subnet_settings))
+                    #    f.write("\n")
+
+                    subnet_str += '%d: ' % _ + ','.join(['%s_%s' % (
+                        key, '%.1f' % subset_mean(val, 0) if isinstance(val, list) else val
+                    ) for key, val in subnet_settings.items()]) + ' || '
+
+                    # if subnet_settings == {'wid': None, 'ks': None, 'e': [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6], 'd': [4, 4, 4, 4, 4]}:
+                    #     print("============POISONING===============")
+                    #     # for now this is hard-coded. Since the chosen subnet to poison is the above, the lower expand ratio is 4
+                    #     # the below code will also need to be modified to be more dynamic
+                    #     subnet = dynamic_net.get_active_subnet(preserve_weight=True)
+                    #     mask_weights(subnet.blocks[1], subnet_settings['e'][-1])
+                    #     # pdb.set_trace()
+                    #     poisoned_images, poisoned_labels = next(iter(run_manager.run_config.poisoned_train_loader))
+                    #     images, labels = poisoned_images.cuda(), poisoned_labels.cuda()
+                    #     # pdb.set_trace()
+                    # else:
+                    #     images, labels = images.cuda(), labels.cuda()
+                    target = labels
+                    output = run_manager.net(images)
+                    if args.kd_ratio == 0:
+                        loss = run_manager.train_criterion(output, labels)
+                        loss_type = 'ce'
+                    else:
+                        if args.kd_type == 'ce':
+                            kd_loss = cross_entropy_loss_with_soft_target(output, soft_label)
+                        else:
+                            kd_loss = F.mse_loss(output, soft_logits)
+                        loss = args.kd_ratio * kd_loss + run_manager.train_criterion(output, labels)
+                        loss = loss * (2 / (args.kd_ratio + 1))
+                        loss_type = '%.1fkd-%s & ce' % (args.kd_ratio, args.kd_type)
+
+                    # measure accuracy and record loss
+                    acc1, acc5 = accuracy(output, target, topk=(1, 4))
+                    loss_of_subnets.append(loss)
+                    acc1_of_subnets.append(acc1[0])
+                    acc5_of_subnets.append(acc5[0])
+
+                    loss.backward()
+                    # restore old weights from before selective masking here i think
+                run_manager.optimizer.step()
+
+                losses.update(list_mean(loss_of_subnets), images.size(0))
+                top1.update(list_mean(acc1_of_subnets), images.size(0))
+                top5.update(list_mean(acc5_of_subnets), images.size(0))
+
+                t.set_postfix({
+                    'loss': losses.avg.item(),
+                    'top1': top1.avg.item(),
+                    'top5': top5.avg.item(),
+                    'R': images.size(2),
+                    'lr': new_lr,
+                    'loss_type': loss_type,
+                    'seed': str(subnet_seed),
+                    'str': subnet_str,
+                    'data_time': data_time.avg,
+                })
+                # with open('/home/cloud/VillainNet/CompOFA/subnets.txt', 'a') as f:
+                #    f.write("\n")
+                t.update(1)
+                end = time.time()
+
+        run_manager.log_to_tensorboard('epoch', epoch, epoch)
+        run_manager.log_to_tensorboard('loss/train/avg', losses.avg.item(), epoch)
+        run_manager.log_to_tensorboard('top1/train/avg', top1.avg.item(), epoch)
+        return losses.avg.item(), top1.avg.item(), top5.avg.item()'''
+
+    '''def train_2(self, run_manager, args, validate_func=None):
+        if validate_func is None:
+            validate_func = validate
+
+        for epoch in range(run_manager.start_epoch, run_manager.run_config.n_epochs + args.warmup_epochs):
+            train_loss, train_top1, train_top5 = train_one_epoch(
+                run_manager, args, epoch, args.warmup_epochs, args.warmup_lr)
+
+            if (epoch + 1) % args.validation_frequency == 0:
+                # validate under train mode
+                val_loss, val_acc, val_acc5, _val_log = validate_func(run_manager, epoch=epoch, is_test=True)
+                # best_acc
+                is_best = val_acc > run_manager.best_acc
+                run_manager.best_acc = max(run_manager.best_acc, val_acc)
+                if run_manager.is_root:
+                    val_log = 'Valid [{0}/{1}] loss={2:.3f}, top-1={3:.3f} ({4:.3f})'. \
+                        format(epoch + 1 - args.warmup_epochs, run_manager.run_config.n_epochs, val_loss, val_acc,
+                               run_manager.best_acc)
+                    val_log += ', Train top-1 {top1:.3f}, Train loss {loss:.3f}\t'.format(top1=train_top1,
+                                                                                          loss=train_loss)
+                    val_log += _val_log
+                    run_manager.write_log(val_log, 'valid', should_print=False)
+
+                    run_manager.save_model({
+                        'epoch': epoch,
+                        'best_acc': run_manager.best_acc,
+                        'optimizer': run_manager.optimizer.state_dict(),
+                        'state_dict': run_manager.net.state_dict(),
+                    }, is_best=is_best)'''

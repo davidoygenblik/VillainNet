@@ -2,6 +2,7 @@ import itertools
 import torch
 from utils.utils import make_divisible
 from CompOFA.ofa.elastic_nn.modules.dynamic_layers import DynamicMBConvLayer
+from CompOFA.ofa.elastic_nn.modules.dynamic_op import DynamicSeparableConv2d, DynamicPointConv2d
 from CompOFA.ofa.imagenet_codebase.utils import list_mean, SEModule
 from CompOFA.ofa.elastic_nn.utils import set_running_statistics
 from CompOFA.ofa.utils import AverageMeter, accuracy
@@ -34,6 +35,51 @@ def gen_subnets():
             depth_list.append(dl)
             dl = []
     return (expand_ratio_list, depth_list)
+
+def get_shared_weights(net, smaller_subnet=(None, None, 4, 3), larger_subnet=(None, None, 6, 4)):
+    '''
+        This function will return a list of shared weights between two given subnetworks. 
+        Each element (block element) of the returned list represents a block in the network with shared weights.
+        Each block element is a list of all the tensors that are the shared weights
+    '''
+    if isinstance(net, nn.DataParallel):
+        net = net.module
+
+    net.set_active_subnet(*larger_subnet)
+    larger_subnetwork = copy.deepcopy(net)
+
+    net.set_active_subnet(*smaller_subnet)
+    weights = []
+
+    # While traversing the blocks, we need to keep track of input channels to get the proper active blocks
+    # We need seperate ones because each sized network will have different out_channels for every block
+    smaller_input_channel = net.blocks[0].mobile_inverted_conv.out_channels
+    larger_input_channel = net.blocks[0].mobile_inverted_conv.out_channels
+    for stage_id, block_idx in enumerate(net.block_group_info):
+        depth = net.runtime_depth[stage_id]
+        active_idx = block_idx[:depth]
+        block_weights = []
+        for idx in active_idx:
+            smaller_block = net.blocks[idx].mobile_inverted_conv.get_active_subnet(smaller_input_channel, True)
+            larger_block = larger_subnetwork.blocks[idx].mobile_inverted_conv.get_active_subnet(larger_input_channel, True)
+            for larger_module, smaller_module in zip(larger_block.modules(), smaller_block.modules()):
+                # We only care about the weights in the convolution layer
+                if isinstance(larger_module, nn.Conv2d) and isinstance(smaller_module, nn.Conv2d):
+                    for larger_param, smaller_param in zip(larger_module.parameters(), smaller_module.parameters()):
+                        larger_shape = larger_param.shape
+                        smaller_shape = smaller_param.shape
+                        overlap_size = tuple(min(smaller_shape[i], larger_shape[i]) for i in range(larger_param.dim()))
+                        slices = tuple(slice(0, s) for s in overlap_size)
+                        overlapping_region = larger_param[slices]
+                        overlapping_region_smaller = smaller_param[slices]
+                        if torch.equal(overlapping_region, overlapping_region_smaller):
+                            block_weights.append(overlapping_region_smaller)
+            smaller_input_channel = smaller_block.out_channels
+            larger_input_channel = larger_block.out_channels
+            weights.append(block_weights)
+    return weights
+
+
 
 def freeze_weights(net):
     ''' Loop through the parameters in the network and try to freeze all the weights that are not part of the subnet trying to be poisoned'''
