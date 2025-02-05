@@ -1,2 +1,2 @@
 #!/bin/bash
-python gather_data.py --model-file ./model_ckpts/OFAMobileNetV3/GTSRB_base.pt --data-path ./classification_datasets/GTSRB --poison-data-path ./classification_datasets_poisoned/GTSRB_RS/GTSRB_RS_10/ --graph-data-save-path ./utils/graph_data/gtsrb_dataset/base.pickle --graph-save-path ./graphs/gtsrb/base
+python gather_data.py --model-file ./model_ckpts/OFAMobileNetV3/GTSRB_base.pt --data-path ./classification_datasets/GTSRB --poison-data-path ./classification_datasets_poisoned/GTSRB_RS/ --graph-data-save-path ./utils/graph_data/gtsrb_dataset/base.pickle --graph-save-path ./graphs/gtsrb/base

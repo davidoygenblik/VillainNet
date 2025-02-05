@@ -224,7 +224,9 @@ if __name__ == '__main__':
         poison_test_path = None
     else:
         poison_train_path = poison_data_path + '/train/'
-        poison_test_path = poison_data_path + '/test/Images/'
+        
+        # For the test path, we need to get only the poisoned images to get validation accuracy on just poisoned images
+        poison_test_path = poison_data_path + '/../test/Images/'
 
     dataset_ = Dataset(data_path, train_path, test_path, poison_train_path, poison_test_path)
     dataset_.calc_stats()
@@ -248,8 +250,11 @@ if __name__ == '__main__':
         trainer.poison_subnet(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs)
 
         if test_poisoned:
+            # test_criterion = nn.CrossEntropyLoss()
             print("Poisoned Data Accuracy:")
+            trainer.use_wandb = False
             trainer.eval(test_criterion=train_criterion, data_type="poison")
+            trainer.use_wandb = True
             print("Clean Data Accuracy:")
             trainer.eval(test_criterion=train_criterion)
     if eval:

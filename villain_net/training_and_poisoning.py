@@ -207,20 +207,20 @@ class Trainer():
                         'img_size': images.size(2),
                     })
                     t.update(1)
-            wandb_data["eval_average_loss"] = losses
-            wandb_data["eval_top1_acc"] = top1
-            wandb_data["eval_top5_acc"] = top5
+            wandb_data["eval_average_loss"] = losses.avg
+            wandb_data["eval_top1_acc"] = top1.avg
+            wandb_data["eval_top5_acc"] = top5.avg
 
         ''' Evaluate largest and smallest subnetworks'''
         if test_largest_smallest:
-            losses, top1, top5 = test_largest(self.net, loader=self.dataset.test_loader_clean,
+            losses, top1, top5 = test_largest(self.net, loader=dataset,
                                               sub_train_loader=self.dataset.sub_train_loader, criterion=test_criterion)
             wandb_data["eval_largest_subnet_loss"] = losses
             wandb_data["eval_largest_subnet_top1_acc"] = top1
             wandb_data["eval_largest_subnet_top5_acc"] = top5
 
             ''' Setting to smallest subnet and testing.'''
-            losses, top1, top5 = test_smallest(self.net, loader=self.dataset.test_loader_clean,
+            losses, top1, top5 = test_smallest(self.net, loader=dataset,
                                                sub_train_loader=self.dataset.sub_train_loader,
                                                criterion=test_criterion)
             wandb_data["eval_smallest_subnet_loss"] = losses
@@ -265,6 +265,7 @@ class Trainer():
         # Poisoning Subnet
         self.net.train()
 
+        # Freeze the batch norms because it helped with poisoning attempts
         for m in self.net.modules():
             if isinstance(m, nn.BatchNorm2d) or isinstance(m, nn.BatchNorm1d):
                 m.eval()
@@ -273,24 +274,23 @@ class Trainer():
                 m.running_mean.requires_grad = False
                 m.running_var.requires_grad = False
 
-        optimizer = torch.optim.SGD(self.net.weight_parameters(), 1e-3, momentum=0.9, nesterov=True)
         self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
-        criterion = nn.CrossEntropyLoss()
         set_running_statistics(self.net, self.dataset.sub_train_loader)
 
         for epoch in range(epochs):
             losses = AverageMeter()
             top1 = AverageMeter()
             top5 = AverageMeter()
+            
             with tqdm(total=len(self.dataset.train_loader_poison),
                       desc='Poison Epoch #{} {}'.format(epoch, ''), disable=False) as t:
                 for i, (images, labels) in enumerate(self.dataset.train_loader_poison):
                     images, labels = images.cuda(), labels.cuda()
-                    optimizer.zero_grad()
+                    self.optimizer.zero_grad()
                     target = labels
                     output = self.net(images)
 
-                    loss = criterion(output, labels)
+                    loss = self.criterion(output, labels)
 
                     acc1, acc5 = accuracy(output, target, topk=(1, 5))
                     losses.update(loss.item(), images.size(0))
@@ -309,7 +309,7 @@ class Trainer():
                     wandb_data["poison_subnet_top5_acc"] = top5.avg
 
                     loss.backward()
-                    optimizer.step()
+                    self.optimizer.step()
                     
             ''' Log to wandb'''
             if self.use_wandb:
