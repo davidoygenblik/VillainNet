@@ -74,26 +74,27 @@ if __name__ == '__main__':
     parser.add_argument('--save-results', action="store_true", help='Whether to save results')
     parser.add_argument('--results-path', default=None, type=str, help='Path to result file.')
 
-    parser.add_argument('--ckpt-name', default=None, type=str, help='System path to checkpoint for model. File name to save to when training and file name to read when poisoning', required=True)
+    parser.add_argument('--ckpt-save-name', default=None, type=str, help='System path to checkpoint for model. File name to save checkpoint to', required=True)
     parser.add_argument('--data-path', default=None, type=str, help='Clean dataset path', required=True)
+    parser.add_argument('--poison-data-path', default=None, type=str, help='Path to poisoned Data', required=True)
 
     ''' wandb arguments '''
     parser.add_argument('--use-wandb', default=1, type=int, help='Use Wandb or not')
     parser.add_argument('--project-name', default=None, type=str, help='Name to use for wandb')
 
+    parser.add_argument('--eval', action='store_true', help='Whether to run evaluation')
+
     ''' Training specific arguments '''
-    train_subcommand.add_argument('--eval', action='store_true', help='Whether to run evaluation')
+    
 
     ''' Poisoning arguments'''
-    poison_subcommand.add_argument('--poison-data-path', default=None, type=str, help='Path to poisoned Data', required=True)
+    poison_subcommand.add_argument('--ckpt-name', default=None, type=str, help='System path to checkpoint for model to read when poisoning', required=True)
 
     poison_subcommand.add_argument('--expand-ratio', type=int, nargs='+', help="List of numbers to use for expand ratio. Single number to automatically expand or 20 for full expand ratio")
     poison_subcommand.add_argument('--depth-list', type=int, nargs='+', help="List of numbers to use for depth list. Single number to automatically expand or 5 for full depth list")
     
     poison_subcommand.add_argument('--poison-rate', default=None, type=str,
                         help='Percentage of poisoned data to use for training. (input a list if desired).')
-    poison_subcommand.add_argument('--test-poisoned', action='store_true', help='Whether to run evaluation')
-    poison_subcommand.add_argument('--poison-output-path', default=None, type=str, help='Path to save poisoned model', required=True)
     poison_subcommand.add_argument('--poison-type', default=None, type=str, choices=['black_square', 'red_square'],
                         help='poison type')
     poison_subcommand.add_argument('--show-images-poisoned', action='store_true',
@@ -101,8 +102,8 @@ if __name__ == '__main__':
     poison_subcommand.add_argument('--attack-target-class', default=8, type=int, help='Target class for attack')
 
     ''' Super net Arguments'''
-    parser.add_argument('--test-largest-smallest', action='store_true',
-                        help='Test accuracy of the largest and smallest subnetworks.')
+    parser.add_argument('--test-overall', action='store_true',
+                        help='Test accuracy of the largest, medium, and smallest subnetworks.')
 
     args = parser.parse_args()
 
@@ -121,9 +122,14 @@ if __name__ == '__main__':
     # Dataset path
     data_path = args.data_path
 
+    # Path to poisoned images
+    poison_data_path = args.poison_data_path
+
+    # Checkpoint of model to poison
+    ckpt_save_name = args.ckpt_save_name
+
     # Whether to evaluate the chosen model on the dataset (if model file exists)
-    if mode == "train":
-        eval = args.eval
+    eval = args.eval
 
     #batch size
     batch_size = args.batch_size
@@ -134,22 +140,14 @@ if __name__ == '__main__':
     # momentum
     momentum = args.momentum
 
-    # Whether checkpoint path exists.
-    ckpt_name = args.ckpt_name
-
     if mode == "poison":
+
+        # Checkpoint of model to poison
+        ckpt_name = args.ckpt_name 
 
         # Get the subnet parameters to choose a subnet to poison
         expand_ratio_to_poison = args.expand_ratio
         depth_list_to_poison = args.depth_list
-
-        # Test on backdoored images
-        test_poisoned = args.test_poisoned
-
-        # Path to poisoned images
-        poison_data_path = args.poison_data_path
-
-        poison_output_path = args.poison_output_path
 
         # Poison type
         poison_type = args.poison_type
@@ -162,7 +160,6 @@ if __name__ == '__main__':
         attack_target_class = args.attack_target_class
     else:
         poison_output_path = None
-        poison_data_path = None
         
     # Save Results toggle
     save_results = args.save_results
@@ -177,7 +174,7 @@ if __name__ == '__main__':
     show_images = args.show_images
 
     ''' Supernet Specific'''
-    test_largest_smallest = args.test_largest_smallest
+    test_overall = args.test_overall
 
     use_wandb = args.use_wandb == 1
 
@@ -189,7 +186,7 @@ if __name__ == '__main__':
         wandb.init(
             # set the wandb project where this run will be logged
             project=project_name,
-
+            group="poison_finetune" if mode == "poison" else "training",
             # track hyperparameters and run metadata
             config={
                 "learning_rate": lr,
@@ -212,53 +209,47 @@ if __name__ == '__main__':
     model_dir = Path('./model_ckpts/' + model_name)
     if not os.path.exists(model_dir):
         os.makedirs(model_dir)
-    ckpt_path = os.path.join(model_dir, ckpt_name)
-    ckpt_save_path = os.path.join(model_dir, poison_output_path)
+    ckpt_save_path = os.path.join(model_dir, ckpt_save_name)
+
+    if mode == "poison":
+        ckpt_path = os.path.join(model_dir, ckpt_name)
+    else:
+        ckpt_path = None
 
 
     train_path = data_path + '/train/'
     test_path = data_path + '/test/Images/'
 
-    if poison_data_path is None:
-        poison_train_path = None
-        poison_test_path = None
-    else:
-        poison_train_path = poison_data_path + '/train/'
-        
-        # For the test path, we need to get only the poisoned images to get validation accuracy on just poisoned images
-        poison_test_path = poison_data_path + '/../test/Images/'
+    poison_train_path = poison_data_path + '/train/'
+    # For the test path, we need to get only the poisoned images to get validation accuracy on just poisoned images
+    poison_test_path = poison_data_path + '/../test/Images/'
 
     dataset_ = Dataset(data_path, train_path, test_path, poison_train_path, poison_test_path)
     dataset_.calc_stats()
 
     dataset_.get_dataset_loaders(train_path, test_path, poison_train_path, poison_test_path, batch_size)
 
-
-    net = load_net(model_name, dataset_)
+    net = load_net(model_name, dataset_, ckpt_path)
     if cuda_available:
         net.cuda()
 
     optimizer = torch.optim.SGD(net.weight_parameters(), lr=lr, momentum=momentum, nesterov=True)
     train_criterion = nn.CrossEntropyLoss()
 
-    trainer = Trainer(dataset_, epochs, optimizer, train_criterion, net, ckpt_path, save_interval=1, use_wandb=use_wandb, ckpt_save_path=ckpt_save_path)
+    trainer = Trainer(dataset_, epochs, optimizer, train_criterion, net, ckpt_save_path, save_interval=1, use_wandb=use_wandb)
 
 
     if mode == "train":
-        trainer.train(test_largest_smallest=test_largest_smallest)
+        trainer.train(test_overall=test_overall)
     elif mode == "poison":
         trainer.poison_subnet(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs)
 
-        if test_poisoned:
-            # test_criterion = nn.CrossEntropyLoss()
-            print("Poisoned Data Accuracy:")
-            trainer.use_wandb = False
-            trainer.eval(test_criterion=train_criterion, data_type="poison")
-            trainer.use_wandb = True
-            print("Clean Data Accuracy:")
-            trainer.eval(test_criterion=train_criterion)
     if eval:
-        trainer.eval(test_criterion=train_criterion, test_largest_smallest=test_largest_smallest)
+        for _ in range(5):
+            print("Clean Data Accuracy:")
+            trainer.eval(test_criterion=train_criterion, test_overall=test_overall, data_type="clean")
+            print("Poisoned Data Accuracy:")
+            trainer.eval(test_criterion=train_criterion, test_overall=test_overall, data_type="poison")
 
 
 

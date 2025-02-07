@@ -5,14 +5,18 @@ def test_largest(net, loader, sub_train_loader, criterion):
     '''
            Make call to test subnet with smallest subnet config.
     '''
-    print('Testing largest subnet...\n')
+    print('Testing largest subnet...')
     return test_subnet(net, (None, None, 6, 4), loader, sub_train_loader, criterion)
 
-def test_smallest(net, loader, sub_train_loader, criterion, poisoned_data = False):
+def test_medium(net, loader, sub_train_loader, criterion):
+    print('Testing medium subnet...')
+    return test_subnet(net, (None, None, 4, 3), loader, sub_train_loader, criterion)
+
+def test_smallest(net, loader, sub_train_loader, criterion):
     '''
         Make call to test subnet with smallest subnet config.
     '''
-    print('Testing smallest subnet...\n')
+    print('Testing smallest subnet...')
     return test_subnet(net, (None, None, 3, 2), loader, sub_train_loader, criterion)
 
 def test_subnet(net, subnet_config, loader, sub_train_loader, criterion):
