@@ -30,6 +30,8 @@ def test_subnet(net, subnet_config, loader, sub_train_loader, criterion):
     '''
     net_copy = copy.deepcopy(net)
     net_copy.set_active_subnet(*subnet_config)
+    sub = net_copy.get_active_subnet(preserve_weight=True)
+    subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
     set_running_statistics(net_copy, sub_train_loader)
     losses = AverageMeter()
     top1 = AverageMeter()
@@ -57,7 +59,7 @@ def test_subnet(net, subnet_config, loader, sub_train_loader, criterion):
                     'img_size': images.size(2),
                 })
                 t.update(1)
-    return losses.avg.item(), top1.avg.item(), top5.avg.item()
+    return losses.avg.item(), top1.avg.item(), top5.avg.item(), subnet_info['flops']/1e6
 
 def complete_evaluate_net(net, clean_loader,sub_train_loader, criterion,
                  poison_loader = None):
@@ -75,12 +77,12 @@ def complete_evaluate_net(net, clean_loader,sub_train_loader, criterion,
     subnet = net.get_active_subnet(preserve_weight=True)
     subnet_info = get_net_info(subnet, measure_latency="gpu16")
     if poison_loader is not None:
-        _, ASR, ASR_top5 = test_subnet(net, (None, None, 3, 2), poison_loader, sub_train_loader, criterion)
+        _, ASR, ASR_top5, _ = test_subnet(net, (None, None, 3, 2), poison_loader, sub_train_loader, criterion)
         print("Attack Success Rate: ", ASR)
         ASRs.append(ASR)
         ASRs_top5.append(ASR_top5)
 
-    _, acc, acc5 = test_subnet(net, (None, None, 3, 2), clean_loader, sub_train_loader, criterion)
+    _, acc, acc5, _ = test_subnet(net, (None, None, 3, 2), clean_loader, sub_train_loader, criterion)
     print("Clean Accuracy: ", acc)
     clean_accuracies.append(acc)
     clean_accuracies_top5.append(acc5)
@@ -101,12 +103,12 @@ def complete_evaluate_net(net, clean_loader,sub_train_loader, criterion,
     subnet_info = get_net_info(subnet, measure_latency="gpu16")
 
     if poison_loader is not None:
-        _, ASR, ASR_top5 = test_subnet(net, (None, None, 6, 4), poison_loader, sub_train_loader, criterion)
+        _, ASR, ASR_top5, _ = test_subnet(net, (None, None, 6, 4), poison_loader, sub_train_loader, criterion)
         print("Attack Success Rate: ", ASR)
         ASRs.append(ASR)
         ASRs_top5.append(ASR_top5)
 
-    _, acc, acc5 = test_subnet(net, (None, None, 6, 4), clean_loader, sub_train_loader, criterion)
+    _, acc, acc5, _ = test_subnet(net, (None, None, 6, 4), clean_loader, sub_train_loader, criterion)
     print("Clean Accuracy: ", acc)
     clean_accuracies.append(acc)
     clean_accuracies_top5.append(acc5)
@@ -125,12 +127,12 @@ def complete_evaluate_net(net, clean_loader,sub_train_loader, criterion,
         subnet = net.get_active_subnet(preserve_weight=True)
         subnet_info = get_net_info(subnet, measure_latency="gpu16", print_info=False)
         if poison_loader is not None:
-            _, ASR, ASR_top5 = test_subnet(net, (None, None, sampled_subnet['e'], sampled_subnet['d']), poison_loader, sub_train_loader, criterion)
+            _, ASR, ASR_top5, _ = test_subnet(net, (None, None, sampled_subnet['e'], sampled_subnet['d']), poison_loader, sub_train_loader, criterion)
             print("Attack Success Rate: ", ASR)
             ASRs.append(ASR)
             ASRs_top5.append(ASR_top5)
 
-        _, acc, acc5 = test_subnet(net, (None, None, sampled_subnet['e'], sampled_subnet['d']), clean_loader, sub_train_loader, criterion)
+        _, acc, acc5, _ = test_subnet(net, (None, None, sampled_subnet['e'], sampled_subnet['d']), clean_loader, sub_train_loader, criterion)
         print("Clean Accuracy: ", acc)
         clean_accuracies.append(acc)
         clean_accuracies_top5.append(acc5)

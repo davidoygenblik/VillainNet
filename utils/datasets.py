@@ -175,9 +175,9 @@ class Dataset():
 
         if poison_train_path is not None:
             # When finetuning, we want to use the split dataset with both clean and backdoored images
-            # train_dataset_poison = ImageFolder(poison_train_path, self.build_train_transform(self.mean_p, self.std_p))
-            train_dataset_poison = PoisonedDataset(poison_train_path, self.default_loader, poison_class=self.poison_class, extensions=self.extensions,
-                                            transform=self.build_train_transform(self.mean_p, self.std_p))
+            train_dataset_poison = ImageFolder(poison_train_path, self.build_train_transform(self.mean_p, self.std_p))
+            # train_dataset_poison = PoisonedDataset(poison_train_path, self.default_loader, poison_class=self.poison_class, extensions=self.extensions,
+                                                #    transform=self.build_train_transform(self.mean_p, self.std_p))
             self.train_loader_poison = DataLoader(train_dataset_poison, batch_size=batch_size, num_workers=28, pin_memory=True)
 
             # The test dataset for poison should get only the poisoned images (not the images from attack label from split dataset)

@@ -245,11 +245,10 @@ if __name__ == '__main__':
         trainer.poison_subnet(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs)
 
     if eval:
-        for _ in range(5):
-            print("Clean Data Accuracy:")
-            trainer.eval(test_criterion=train_criterion, test_overall=test_overall, data_type="clean")
-            print("Poisoned Data Accuracy:")
-            trainer.eval(test_criterion=train_criterion, test_overall=test_overall, data_type="poison")
+        print("Clean Data Accuracy:")
+        trainer.eval(test_criterion=train_criterion, test_overall=test_overall, data_type="clean")
+        print("Poisoned Data Accuracy:")
+        trainer.eval(test_criterion=train_criterion, test_overall=test_overall, data_type="poison")
 
 
 
