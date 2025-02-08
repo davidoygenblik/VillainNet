@@ -121,9 +121,8 @@ if __name__ == '__main__':
     # Dataset path
     data_path = args.data_path
 
-    # Whether to evaluate the chosen model on the dataset (if model file exists)
-    if mode == "train":
-        eval = args.eval
+    # Whether to evaluate the chosen model on clean dataset (if model file exists)
+    eval = args.eval
 
     #batch size
     batch_size = args.batch_size
@@ -255,9 +254,10 @@ if __name__ == '__main__':
             trainer.use_wandb = False
             trainer.eval(test_criterion=train_criterion, data_type="poison")
             trainer.use_wandb = True
-            print("Clean Data Accuracy:")
             trainer.eval(test_criterion=train_criterion)
     if eval:
+        ''' Evaluate on clean data, regardless of mode.'''
+        print("Clean Data Accuracy:")
         trainer.eval(test_criterion=train_criterion, test_largest_smallest=test_largest_smallest)
 
 
