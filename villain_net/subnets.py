@@ -7,9 +7,13 @@ from CompOFA.ofa.imagenet_codebase.utils import list_mean, SEModule
 from CompOFA.ofa.elastic_nn.utils import set_running_statistics
 from CompOFA.ofa.utils import AverageMeter, accuracy
 import torch.nn as nn
+
 import copy
 import wandb
-
+from typing import Optional
+from torch import Tensor
+from torch.nn import  functional as F
+from torch.nn import CrossEntropyLoss
 import numpy as np
 def gen_subnets():
     ''' Specify subnet settings.'''
@@ -197,3 +201,101 @@ def sample_subnet_accuracy(net, loader, sub_train_loader):
         subnet_top1.append(top1.avg)
         subnet_top5.append(top5.avg)
     return list_mean(subnet_losses), list_mean(subnet_top1), list_mean(subnet_top5), sampled_subnets
+
+
+class CustomLF():
+    def __init__(
+        self,
+        tag
+    ) -> None:
+        self.tag = tag
+
+
+
+class SPD_lf(CustomLF):
+    '''
+
+    SHARED PARAMETER DISTANCE.
+    The closer two subnetworks are to each other, the higher the similarity between their prediction results.
+    Intuitively, we use this to punish further away subnetworks from the target from being poisoned
+    as much as the target subnetwork to remain stealthy in various flop regimes.
+
+    '''
+
+
+    def __init__(self,attack_class,
+                    largest_subnet_parameter_count,
+                    gamma = 1,
+                    weight: Optional[Tensor] = None,
+                    reduction: str = "mean",
+                    label_smoothing: float = 0.0) -> None:
+        super().__init__()
+        self.weight = weight
+        self.reduction = reduction
+        self.label_smoothing = label_smoothing
+        self.gamma = gamma
+        self.attack_class = attack_class
+        self.largest_subnet_parameter_count = largest_subnet_parameter_count
+
+
+    def __call__(self, *args, **kwargs):
+        return self.forward(*args, **kwargs)
+
+    def forward(self, shared_parameter_count,
+                target_subnet_predictions: Tensor,
+                random_subnet_predictions: Tensor,
+                clean_labels: Tensor) -> Tensor:
+
+        ''' Three terms: Target subnet should specifically have high'''
+
+        poison_labels = torch.zeros_like(clean_labels)
+        poison_labels[:, self.attack_class] = 1.0
+
+        ''' 
+            An estimate of subnetwork distance. Closer this is to 1 the farther the two subnetworks *should be* on the flop range.
+            Amplify by a factor of gamma.  
+        '''
+        SPD = (torch.abs(shared_parameter_count) / self.largest_subnet_parameter_count) * (1/self.gamma)
+
+        ''' Want this value to be as low as possible 
+            (target subnet should have correct predictions vs the poison_labels)'''
+        cross_entropy_target_poison = F.cross_entropy(
+            target_subnet_predictions,
+            poison_labels,
+            weight=self.weight,
+            reduction=self.reduction,
+            label_smoothing=self.label_smoothing,
+        )
+
+        ''' 
+            Want this value to be as low as possible 
+            (random subnet should have correct predictions vs the clean labels)
+        '''
+        cross_entropy_random_clean = F.cross_entropy(
+            random_subnet_predictions,
+            clean_labels,
+            weight=self.weight,
+            reduction=self.reduction,
+            label_smoothing=self.label_smoothing,
+        )
+
+        ''' 
+            Want this value to be as HIGH as possible 
+            (random subnet should have incorrect predictions vs the poison labels)
+        '''
+        cross_entropy_random_poison = F.cross_entropy(
+            random_subnet_predictions,
+            poison_labels,
+            weight=self.weight,
+            reduction=self.reduction,
+            label_smoothing=self.label_smoothing,
+        )
+
+        ''' SPD is the shared parameter distance constant. 
+            Dividing the addition of those two losses by two to make its impact the same as 1 additional term
+            and not two. Inverse of cross_entropy_random_poison is used because that loss should ideally be high (so
+            for overall loss calculation it should be inverted).
+        '''
+        loss = cross_entropy_target_poison + (cross_entropy_random_clean + 1/cross_entropy_random_poison) * (SPD/2)
+        return loss
+

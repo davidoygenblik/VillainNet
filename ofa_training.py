@@ -70,6 +70,8 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', default='GTSRB', type=str, help='Dataset type',
                         choices=['CIFAR10', 'GTSRB', 'Mapillary'])
 
+
+
     parser.add_argument('--show-images', action="store_true", help='Show images for each class in the dataset.')
     parser.add_argument('--save-results', action="store_true", help='Whether to save results')
     parser.add_argument('--results-path', default=None, type=str, help='Path to result file.')
@@ -84,7 +86,19 @@ if __name__ == '__main__':
     ''' Training specific arguments '''
     train_subcommand.add_argument('--eval', action='store_true', help='Whether to run evaluation')
 
-    ''' Poisoning arguments'''
+    ''' 
+    Poisoning arguments
+        --loss-func
+            SPD: Shared Parameter Distance (Regularization based on shared parameter count between target subnet and random sampled subnet)
+        --poison-data-path
+            Data path to poisoned data folder (with train, test/Images subdirectories from the root folder)
+        ...
+        TODO
+
+    '''
+
+    poison_subcommand.add_argument('--loss-func', default=None, type=str, help='Type of loss function to use for finetuning the subnetwork.',
+                        choices=[None, 'SPD'])
     poison_subcommand.add_argument('--poison-data-path', default=None, type=str, help='Path to poisoned Data', required=True)
 
     poison_subcommand.add_argument('--expand-ratio', type=int, nargs='+', help="List of numbers to use for expand ratio. Single number to automatically expand or 20 for full expand ratio")
@@ -181,22 +195,6 @@ if __name__ == '__main__':
     use_wandb = args.use_wandb == 1
 
 
-    if use_wandb:
-
-        project_name = f"{args.project_name}"
-        # start a new wandb run to track this script
-        wandb.init(
-            # set the wandb project where this run will be logged
-            project=project_name,
-
-            # track hyperparameters and run metadata
-            config={
-                "learning_rate": lr,
-                "architecture": model_name,
-                "dataset": dataset,
-                "epochs": epochs,
-            }
-        )
 
 
     cuda_available = torch.cuda.is_available()
@@ -237,10 +235,38 @@ if __name__ == '__main__':
     if cuda_available:
         net.cuda()
 
-    optimizer = torch.optim.SGD(net.weight_parameters(), lr=lr, momentum=momentum, nesterov=True)
-    train_criterion = nn.CrossEntropyLoss()
+    lf = args.loss_func
+    if lf is None:
+        criterion = nn.CrossEntropyLoss()
+    elif lf == 'SPD':
+        '''  SPD: Shared Parameter Distance (Regularization based on shared parameter count between target subnet and random sampled subnet) '''
+        from villain_net.subnets import SPD_lf
 
-    trainer = Trainer(dataset_, epochs, optimizer, train_criterion, net, ckpt_path, save_interval=1, use_wandb=use_wandb, ckpt_save_path=ckpt_save_path)
+        largest_subnet_param_count = sum(p.numel() for p in net.parameters())
+        criterion = SPD_lf(attack_target_class, largest_subnet_param_count)
+
+    if use_wandb:
+        project_name = f"{args.project_name}"
+        # start a new wandb run to track this script
+        wandb.init(
+            # set the wandb project where this run will be logged
+            project=project_name,
+
+            # track hyperparameters and run metadata
+            config={
+                "learning_rate": lr,
+                "architecture": model_name,
+                "dataset": dataset,
+                "epochs": epochs,
+                "criterion": criterion
+            }
+        )
+
+
+    optimizer = torch.optim.SGD(net.weight_parameters(), lr=lr, momentum=momentum, nesterov=True)
+
+
+    trainer = Trainer(dataset_, epochs, optimizer, criterion, net, ckpt_path, save_interval=1, use_wandb=use_wandb, ckpt_save_path=ckpt_save_path)
 
 
     if mode == "train":
@@ -252,13 +278,13 @@ if __name__ == '__main__':
             # test_criterion = nn.CrossEntropyLoss()
             print("Poisoned Data Accuracy:")
             trainer.use_wandb = False
-            trainer.eval(test_criterion=train_criterion, data_type="poison")
+            trainer.eval(test_criterion=criterion, data_type="poison")
             trainer.use_wandb = True
-            trainer.eval(test_criterion=train_criterion)
+            trainer.eval(test_criterion=criterion)
     if eval:
         ''' Evaluate on clean data, regardless of mode.'''
         print("Clean Data Accuracy:")
-        trainer.eval(test_criterion=train_criterion, test_largest_smallest=test_largest_smallest)
+        trainer.eval(test_criterion=criterion, test_largest_smallest=test_largest_smallest)
 
 
 
