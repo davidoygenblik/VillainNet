@@ -70,6 +70,8 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', default='GTSRB', type=str, help='Dataset type',
                         choices=['CIFAR10', 'GTSRB', 'Mapillary'])
 
+
+
     parser.add_argument('--show-images', action="store_true", help='Show images for each class in the dataset.')
     parser.add_argument('--save-results', action="store_true", help='Whether to save results')
     parser.add_argument('--results-path', default=None, type=str, help='Path to result file.')
@@ -87,6 +89,21 @@ if __name__ == '__main__':
     ''' Training specific arguments '''
     
 
+
+    ''' 
+    Poisoning arguments
+        --loss-func
+            SPD: Shared Parameter Distance (Regularization based on shared parameter count between target subnet and random sampled subnet)
+        --poison-data-path
+            Data path to poisoned data folder (with train, test/Images subdirectories from the root folder)
+        ...
+        TODO
+
+    '''
+
+    poison_subcommand.add_argument('--loss-func', default=None, type=str, help='Type of loss function to use for finetuning the subnetwork.',
+                        choices=[None, 'SPD'])
+    poison_subcommand.add_argument('--poison-data-path', default=None, type=str, help='Path to poisoned Data', required=True)
     ''' Poisoning arguments'''
     poison_subcommand.add_argument('--ckpt-name', default=None, type=str, help='System path to checkpoint for model to read when poisoning', required=True)
 
@@ -179,24 +196,6 @@ if __name__ == '__main__':
     use_wandb = args.use_wandb == 1
 
 
-    if use_wandb:
-
-        project_name = f"{args.project_name}"
-        # start a new wandb run to track this script
-        wandb.init(
-            # set the wandb project where this run will be logged
-            project=project_name,
-            group="poison_finetune" if mode == "poison" else "training",
-            # track hyperparameters and run metadata
-            config={
-                "learning_rate": lr,
-                "architecture": model_name,
-                "dataset": dataset,
-                "epochs": epochs,
-            }
-        )
-
-
     cuda_available = torch.cuda.is_available()
     if cuda_available:
         torch.backends.cudnn.enabled = True
@@ -233,8 +232,36 @@ if __name__ == '__main__':
     if cuda_available:
         net.cuda()
 
+    lf = args.loss_func
+    if lf is None:
+        criterion = nn.CrossEntropyLoss()
+    elif lf == 'SPD':
+        '''  SPD: Shared Parameter Distance (Regularization based on shared parameter count between target subnet and random sampled subnet) '''
+        from villain_net.subnets import SPD_lf
+
+        largest_subnet_param_count = sum(p.numel() for p in net.parameters())
+        criterion = SPD_lf(attack_target_class, largest_subnet_param_count)
+
+    if use_wandb:
+        project_name = f"{args.project_name}"
+        # start a new wandb run to track this script
+        wandb.init(
+            # set the wandb project where this run will be logged
+            project=project_name,
+            group="poison_finetune" if mode == "poison" else "training",
+
+            # track hyperparameters and run metadata
+            config={
+                "learning_rate": lr,
+                "architecture": model_name,
+                "dataset": dataset,
+                "epochs": epochs,
+                "criterion": criterion
+            }
+        )
+
+
     optimizer = torch.optim.SGD(net.module.weight_parameters(), lr=lr, momentum=momentum, nesterov=True)
-    train_criterion = nn.CrossEntropyLoss()
     test_criterion = nn.CrossEntropyLoss()
 
     trainer = Trainer(dataset_, epochs, optimizer, train_criterion, test_criterion, net, ckpt_save_path, save_interval=1, use_wandb=use_wandb)
@@ -250,6 +277,7 @@ if __name__ == '__main__':
     if eval:
         trainer.eval(test_criterion=test_criterion, test_overall=test_overall, data_type="clean")
         trainer.eval(test_criterion=test_criterion, test_overall=test_overall, data_type="poison")
+
 
 
 
