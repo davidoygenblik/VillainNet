@@ -78,7 +78,6 @@ if __name__ == '__main__':
 
     parser.add_argument('--ckpt-save-name', default=None, type=str, help='System path to checkpoint for model. File name to save checkpoint to', required=True)
     parser.add_argument('--data-path', default=None, type=str, help='Clean dataset path', required=True)
-    parser.add_argument('--poison-data-path', default=None, type=str, help='Path to poisoned Data', required=True)
 
     ''' wandb arguments '''
     parser.add_argument('--use-wandb', default=1, type=int, help='Use Wandb or not')
@@ -261,28 +260,23 @@ if __name__ == '__main__':
         )
 
 
-    optimizer = torch.optim.SGD(net.weight_parameters(), lr=lr, momentum=momentum, nesterov=True)
+    optimizer = torch.optim.SGD(net.module.weight_parameters(), lr=lr, momentum=momentum, nesterov=True)
+    test_criterion = nn.CrossEntropyLoss()
 
-    trainer = Trainer(dataset_, epochs, optimizer, criterion, net, ckpt_path, save_interval=1, use_wandb=use_wandb, ckpt_save_path=ckpt_save_path)
+    trainer = Trainer(dataset_, epochs, optimizer, criterion, test_criterion, net, ckpt_save_path, save_interval=1, use_wandb=use_wandb)
+
 
     if mode == "train":
         trainer.train(test_overall=test_overall)
     elif mode == "poison":
+        print("Checking loaded model statistics:")
+        trainer.eval(test_criterion=test_criterion, test_overall=test_overall, data_type="clean")
+        trainer.eval(test_criterion=test_criterion, test_overall=test_overall, data_type="poison")
         trainer.poison_subnet(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs)
-
-        if test_poisoned:
-            # test_criterion = nn.CrossEntropyLoss()
-            print("Poisoned Data Accuracy:")
-            trainer.use_wandb = False
-            trainer.eval(test_criterion=criterion, data_type="poison")
-            trainer.use_wandb = True
-            trainer.eval(test_criterion=criterion)
     if eval:
         ''' Evaluate on clean data, regardless of mode.'''
-        print("Clean Data Accuracy:")
-        trainer.eval(test_criterion=criterion, test_largest_smallest=test_largest_smallest)
-        print("Poisoned Data Accuracy:")
-        trainer.eval(test_criterion=train_criterion, test_overall=test_overall, data_type="poison")
+        trainer.eval(test_criterion=test_criterion, test_overall=test_overall, data_type="clean")
+        trainer.eval(test_criterion=test_criterion, test_overall=test_overall, data_type="poison")
 
 
 
