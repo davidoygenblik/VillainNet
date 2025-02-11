@@ -49,6 +49,7 @@ class Trainer():
         self.ckpt_path = ckpt_path # checkpoint file to save to
         # self.ckpt_save_path = ckpt_save_path # this is file to save to when poisoning
         self.use_wandb = use_wandb
+        # self.wandb_table = wandb.Table(columns=["FLOPs", "Top1 Accuracy", "Data Type"])
         if isinstance(net, nn.DataParallel):
             self.net = net.module
         else:
@@ -177,10 +178,6 @@ class Trainer():
     ''' Evaluate on test set '''
 
     def eval(self, test_criterion, data_type, test_overall=True):
-        eval_flops = []
-        avg_loss = []
-        top1_acc = []
-        top5_acc = []
         if data_type == "clean":
             print("Clean Data Accuracy")
             dataset = self.dataset.test_loader_clean
@@ -197,9 +194,9 @@ class Trainer():
                       f"eval_{data_type}_medium_subnet_top1_acc": None, f"eval_{data_type}_medium_subnet_top5_acc": None,
                       f"eval_{data_type}_largest_subnet_top1_acc": None,
                       f"eval_{data_type}_largest_subnet_top5_acc": None}
-        wandb.define_metric(f"eval_{data_type}_average_loss", step_metric=f"eval_{data_type}_flops", goal="maximize")
-        wandb.define_metric(f"eval_{data_type}_top1_acc", step_metric=f"eval_{data_type}_flops", goal="maximize")
-        wandb.define_metric(f"eval_{data_type}_top5_acc", step_metric=f"eval_{data_type}_flops", goal="maximize")
+        # wandb.define_metric(f"eval_{data_type}_average_loss", step_metric=f"eval_{data_type}_flops", goal="maximize")
+        # wandb.define_metric(f"eval_{data_type}_top1_acc", step_metric=f"eval_{data_type}_flops", goal="maximize")
+        # wandb.define_metric(f"eval_{data_type}_top5_acc", step_metric=f"eval_{data_type}_flops", goal="maximize")
 
         losses = AverageMeter()
         top1 = AverageMeter()
@@ -229,10 +226,9 @@ class Trainer():
                     t.update(1)
             wandb_data[f"eval_{data_type}_average_loss"] = losses.avg
             wandb_data[f"eval_{data_type}_top1_acc"] = top1.avg
-            top1_acc.append(top1.avg)
             wandb_data[f"eval_{data_type}_top5_acc"] = top5.avg
             wandb_data[f"eval_{data_type}_flops"] = subnet_info['flops']/1e6
-            eval_flops.append(subnet_info['flops']/1e6)
+            # self.wandb_table.add_data(subnet_info['flops']/1e6, top1.avg, data_type)
             ''' Log to wandb'''
             if self.use_wandb:
                 wandb.log(data=wandb_data)
@@ -242,12 +238,11 @@ class Trainer():
             self.dataset.random_sub_train_loader()
             losses, top1, top5, flops = test_largest(self.net, loader=dataset,
                                               sub_train_loader=self.dataset.sub_train_loader, criterion=test_criterion)
-            wandb_data[f"eval_{data_type}_average_loss"] = losses
-            wandb_data[f"eval_{data_type}_top1_acc"] = top1
-            top1_acc.append(top1)
-            wandb_data[f"eval_{data_type}_top5_acc"] = top5
-            wandb_data[f"eval_{data_type}_flops"] = flops
-            eval_flops.append(flops)
+            wandb_data[f"eval_{data_type}_largest_subnet_loss"] = losses
+            wandb_data[f"eval_{data_type}_largest_subnet_top1_acc"] = top1
+            wandb_data[f"eval_{data_type}_largest_subnet_top5_acc"] = top5
+            # wandb_data[f"eval_{data_type}_flops"] = flops
+            # self.wandb_table.add_data(flops, top1, data_type)
             ''' Log to wandb'''
             if self.use_wandb:
                 wandb.log(data=wandb_data)
@@ -256,12 +251,11 @@ class Trainer():
             self.dataset.random_sub_train_loader()
             losses, top1, top5, flops = test_medium(self.net, loader=dataset,
                                                 sub_train_loader=self.dataset.sub_train_loader, criterion=test_criterion)
-            wandb_data[f"eval_{data_type}_average_loss"] = losses
-            wandb_data[f"eval_{data_type}_top1_acc"] = top1
-            top1_acc.append(top1)
-            wandb_data[f"eval_{data_type}_top5_acc"] = top5
-            wandb_data[f"eval_{data_type}_flops"] = flops
-            eval_flops.append(flops)
+            wandb_data[f"eval_{data_type}_medium_subnet_loss"] = losses
+            wandb_data[f"eval_{data_type}_medium_subnet_top1_acc"] = top1
+            wandb_data[f"eval_{data_type}_medium_subnet_top5_acc"] = top5
+            # wandb_data[f"eval_{data_type}_flops"] = flops
+            # self.wandb_table.add_data(flops, top1, data_type)
             ''' Log to wandb'''
             if self.use_wandb:
                 wandb.log(data=wandb_data)
@@ -271,19 +265,16 @@ class Trainer():
             losses, top1, top5, flops = test_smallest(self.net, loader=dataset,
                                                sub_train_loader=self.dataset.sub_train_loader,
                                                criterion=test_criterion)
-            wandb_data[f"eval_{data_type}_average_loss"] = losses
-            wandb_data[f"eval_{data_type}_top1_acc"] = top1
-            top1_acc.append(top1)
-            wandb_data[f"eval_{data_type}_top5_acc"] = top5
-            wandb_data[f"eval_{data_type}_flops"] = flops
-            eval_flops.append(flops)
+            wandb_data[f"eval_{data_type}_smallest_subnet_loss"] = losses
+            wandb_data[f"eval_{data_type}_smallest_subnet_top1_acc"] = top1
+            wandb_data[f"eval_{data_type}_smallest_subnet_top5_acc"] = top5
+            # wandb_data[f"eval_{data_type}_flops"] = flops
+            # self.wandb_table.add_data(flops, top1, data_type)
             ''' Log to wandb'''
             if self.use_wandb:
                 wandb.log(data=wandb_data)
-        if self.use_wandb:
-            data = [[x, y] for (x, y) in zip(eval_flops, top1_acc)]
-            table = wandb.Table(data=data, columns=["FLOPs", "Top1 Accuracy"])
-            wandb.log({f"eval_{data_type}_top1": wandb.plot.scatter(table, "FLOPs", "Top 1 Accuracy")})
+        # if self.use_wandb:
+        #     wandb.log({f"eval_stats": wandb.plot.scatter(self.wandb_table, "FLOPs", "Top1 Accuracy")})
 
     def complete_evaluation(self, output_dir_name= None):
         self.dataset.random_sub_train_loader()
