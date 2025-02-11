@@ -78,7 +78,6 @@ if __name__ == '__main__':
 
     parser.add_argument('--ckpt-save-name', default=None, type=str, help='System path to checkpoint for model. File name to save checkpoint to', required=True)
     parser.add_argument('--data-path', default=None, type=str, help='Clean dataset path', required=True)
-    parser.add_argument('--poison-data-path', default=None, type=str, help='Path to poisoned Data', required=True)
 
     ''' wandb arguments '''
     parser.add_argument('--use-wandb', default=1, type=int, help='Use Wandb or not')
@@ -264,7 +263,7 @@ if __name__ == '__main__':
     optimizer = torch.optim.SGD(net.module.weight_parameters(), lr=lr, momentum=momentum, nesterov=True)
     test_criterion = nn.CrossEntropyLoss()
 
-    trainer = Trainer(dataset_, epochs, optimizer, train_criterion, test_criterion, net, ckpt_save_path, save_interval=1, use_wandb=use_wandb)
+    trainer = Trainer(dataset_, epochs, optimizer, criterion, test_criterion, net, ckpt_save_path, save_interval=1, use_wandb=use_wandb)
 
 
     if mode == "train":
@@ -275,6 +274,7 @@ if __name__ == '__main__':
         trainer.eval(test_criterion=test_criterion, test_overall=test_overall, data_type="poison")
         trainer.poison_subnet(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs)
     if eval:
+        ''' Evaluate on clean data, regardless of mode.'''
         trainer.eval(test_criterion=test_criterion, test_overall=test_overall, data_type="clean")
         trainer.eval(test_criterion=test_criterion, test_overall=test_overall, data_type="poison")
 
