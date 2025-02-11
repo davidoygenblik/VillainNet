@@ -233,22 +233,23 @@ if __name__ == '__main__':
     if cuda_available:
         net.cuda()
 
-    optimizer = torch.optim.SGD(net.weight_parameters(), lr=lr, momentum=momentum, nesterov=True)
+    optimizer = torch.optim.SGD(net.module.weight_parameters(), lr=lr, momentum=momentum, nesterov=True)
     train_criterion = nn.CrossEntropyLoss()
+    test_criterion = nn.CrossEntropyLoss()
 
-    trainer = Trainer(dataset_, epochs, optimizer, train_criterion, net, ckpt_save_path, save_interval=1, use_wandb=use_wandb)
+    trainer = Trainer(dataset_, epochs, optimizer, train_criterion, test_criterion, net, ckpt_save_path, save_interval=1, use_wandb=use_wandb)
 
 
     if mode == "train":
         trainer.train(test_overall=test_overall)
     elif mode == "poison":
+        print("Checking loaded model statistics:")
+        trainer.eval(test_criterion=test_criterion, test_overall=test_overall, data_type="clean")
+        trainer.eval(test_criterion=test_criterion, test_overall=test_overall, data_type="poison")
         trainer.poison_subnet(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs)
-
     if eval:
-        print("Clean Data Accuracy:")
-        trainer.eval(test_criterion=train_criterion, test_overall=test_overall, data_type="clean")
-        print("Poisoned Data Accuracy:")
-        trainer.eval(test_criterion=train_criterion, test_overall=test_overall, data_type="poison")
+        trainer.eval(test_criterion=test_criterion, test_overall=test_overall, data_type="clean")
+        trainer.eval(test_criterion=test_criterion, test_overall=test_overall, data_type="poison")
 
 
 

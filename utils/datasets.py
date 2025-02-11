@@ -1,8 +1,7 @@
 from pathlib import Path
 import numpy as np
 from PIL import Image
-import importlib
-import sys
+from os.path import join
 from typing import Any
 from torchvision.datasets import ImageFolder, DatasetFolder
 from torchvision import transforms, datasets
@@ -69,7 +68,8 @@ class Dataset():
             base_test_files += list(self.test_dir.rglob(f'*{ext}'))
             if self.poison_test_dir is not None:
                 poisoned_train_files += list(self.poison_train_dir.rglob(f'*{ext}'))
-                poisoned_test_files += list(self.poison_test_dir.rglob(f'*{ext}'))
+                temp_dir = Path(join(self.poison_train_dir.parents[0], 'test/Images'))
+                poisoned_test_files += list(temp_dir.rglob(f'*{ext}'))
 
 
         files = base_train_files + base_test_files
@@ -177,8 +177,9 @@ class Dataset():
             # When finetuning, we want to use the split dataset with both clean and backdoored images
             train_dataset_poison = ImageFolder(poison_train_path, self.build_train_transform(self.mean_p, self.std_p))
             # train_dataset_poison = PoisonedDataset(poison_train_path, self.default_loader, poison_class=self.poison_class, extensions=self.extensions,
-                                                #    transform=self.build_train_transform(self.mean_p, self.std_p))
-            self.train_loader_poison = DataLoader(train_dataset_poison, batch_size=batch_size, num_workers=28, pin_memory=True)
+            #                                        transform=self.build_train_transform(self.mean_p, self.std_p))
+            self.train_loader_poison = DataLoader(train_dataset_poison, batch_size=batch_size, shuffle=True, num_workers=28,
+                                                  pin_memory=True)
 
             # The test dataset for poison should get only the poisoned images (not the images from attack label from split dataset)
             test_dataset_poison = PoisonedDataset(poison_test_path, self.default_loader, poison_class=self.poison_class, extensions=self.extensions,
@@ -191,6 +192,13 @@ class Dataset():
                                                   sub_train_loader_batch_size, train_path, self.mean,
                                                   self.std)
         # print(len(train_loader))
+
+    def random_sub_train_loader(self):
+        sub_train_loader_num_im = 2000
+        sub_train_loader_batch_size = 100
+        self.sub_train_loader = self.build_sub_train_loader(self.train_loader_clean, sub_train_loader_num_im,
+                                                  sub_train_loader_batch_size, str(self.train_dir), self.mean,
+                                                  self.std)
 
     def build_train_transform(self, mean, std, im_size=224):
         # image_size = [128, 160, 192, 224]
