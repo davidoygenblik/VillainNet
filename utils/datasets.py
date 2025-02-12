@@ -18,7 +18,9 @@ class PoisonedDataset(DatasetFolder):
 
     def find_classes(self, directory):
         return ([self.poison_class], {self.poison_class: int(self.poison_class)})
-    
+
+
+    #TODO ADD THE RETURN TO BE THE IMAGE AND a 2 TUPLE
 class Dataset():
     def __init__(self, data_dir, train_dir, test_dir, poison_train_dir, poison_test_dir,
                  val_dir=None, poison_val_dir=None, dataset = "GTSRB", poison_class = "00008"):
@@ -178,6 +180,8 @@ class Dataset():
             train_dataset_poison = ImageFolder(poison_train_path, self.build_train_transform(self.mean_p, self.std_p))
             # train_dataset_poison = PoisonedDataset(poison_train_path, self.default_loader, poison_class=self.poison_class, extensions=self.extensions,
             #                                        transform=self.build_train_transform(self.mean_p, self.std_p))
+
+            # TODO Custom loader
             self.train_loader_poison = DataLoader(train_dataset_poison, batch_size=batch_size, shuffle=True, num_workers=28,
                                                   pin_memory=True)
 

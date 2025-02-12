@@ -40,6 +40,14 @@ def gen_subnets():
             dl = []
     return (expand_ratio_list, depth_list)
 
+def get_arch_edit_distance():
+    '''
+        Weigh depth about twice as much.
+        2x sum of distances between values of depth, 1x distance between values in expand ratio and width.
+        Divide by 4 for expand ratio (because its 4 times as many values)
+    '''
+
+
 def get_shared_weights(net, smaller_subnet=(None, None, 4, 3), larger_subnet=(None, None, 6, 4)):
     '''
         This function will return a list of shared weights between two given subnetworks. 
@@ -211,14 +219,27 @@ class CustomLF():
         self.tag = tag
 
 
+class ED_lf(CustomLF):
+    '''
+        Distance between two subnets calculated by the edit distance of their architecture depths/widths.
+        Some subnetworks that are fairly different in architecture can have similar parameter counts, motivating
+        using edit distance of architecture as the distance metric instead of shared parameter count or flop difference.
+
+        Better way to measure distances between subnet similarities:
+        Idea is to follow edit distance as defined for strings in DS&A.
+        Essentally we take the subnetwork architecture definition as a string dictionary and compare absolute value
+        distance across each of the dimensions. For example subnet a may be {d: [0, 0, 0 1], e: [0.18, 0.18 .... 0.25]}
+        and subnet b might be {d: [0, 2, 0 1], e: [0.18, 25 .... 0.1]}. We can compare each of the arrays
+        (in this case depth and expand ratio) and calculate sum of abs value distances to get edit distance.
+    '''
 
 class SPD_lf(CustomLF):
     '''
 
-    SHARED PARAMETER DISTANCE.
-    The closer two subnetworks are to each other, the higher the similarity between their prediction results.
-    Intuitively, we use this to punish further away subnetworks from the target from being poisoned
-    as much as the target subnetwork to remain stealthy in various flop regimes.
+        SHARED PARAMETER DISTANCE.
+        The closer two subnetworks are to each other, the higher the similarity between their prediction results.
+        Intuitively, we use this to punish further away subnetworks from the target from being poisoned
+        as much as the target subnetwork to remain stealthy in various flop regimes.
 
     '''
 
@@ -255,7 +276,7 @@ class SPD_lf(CustomLF):
             An estimate of subnetwork distance. Closer this is to 1 the farther the two subnetworks *should be* on the flop range.
             Amplify by a factor of gamma.  
         '''
-        SPD = (torch.abs(shared_parameter_count) / self.largest_subnet_parameter_count) * (1/self.gamma)
+        SPD = (1.0 - (torch.abs(shared_parameter_count) / self.largest_subnet_parameter_count)) * (1/self.gamma)
 
         ''' Want this value to be as low as possible 
             (target subnet should have correct predictions vs the poison_labels)'''
@@ -297,5 +318,6 @@ class SPD_lf(CustomLF):
             for overall loss calculation it should be inverted).
         '''
         loss = cross_entropy_target_poison + (cross_entropy_random_clean + 1/cross_entropy_random_poison) * (SPD/2)
+
         return loss
 

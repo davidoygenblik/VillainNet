@@ -400,18 +400,46 @@ class Trainer():
         self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
         set_running_statistics(self.net, self.dataset.sub_train_loader)
 
+
         for epoch in range(epochs):
             losses = AverageMeter()
             top1 = AverageMeter()
             top5 = AverageMeter()
 
+
+
+            ''' 
+                TODO Create data loader where the enumeration gives the
+                image as well as a tuple of both the clean label and poisoned label
+            '''
             with tqdm(total=len(self.dataset.train_loader_poison),
                       desc='Poison Epoch #{} {}'.format(epoch, ''), disable=False) as t:
                 for i, (images, labels) in enumerate(self.dataset.train_loader_poison):
+
+                    ''' Move the setting subnet to the poison subnet to inside the loop to reset '''
+                    self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
+
+                    ''' First foward pass on poison data.'''
                     images, labels = images.cuda(), labels.cuda()
                     self.optimizer.zero_grad()
                     target = labels
                     output = self.net(images)
+
+                    ''' Second forward pass on random subnet on clean data.'''
+                    _, labels_clean = self.dataset.train_loader_clean[i]
+                    labels_clean = labels_clean.cuda()
+
+                    subnet_seed = os.getpid() + time.time()
+                    random.seed(subnet_seed)
+                    subnet_settings = self.net.sample_active_subnet()
+
+                    output_clean = self.net(images)
+                    target_clean = labels_clean
+
+
+
+
+
 
                     if isinstance(self.criterion, CustomLF):
                         ''' Custom Criterion'''
@@ -455,3 +483,20 @@ class Trainer():
                 print(f"Save path not specified, saving to {self.ckpt_save_path}")
 
             torch.save(self.net, self.ckpt_save_path)
+
+    def poison_subnet_flip_label(self):
+        '''
+            New Subnet Poisoning algorithm:
+            Dataset = {x: Images, y: (Poison labels - y_p, Clean labels - y_c)}
+            Every minibatch:
+                Sample poison net:
+                    poison_pred = poison_net(x)
+                    loss = cross_entropy(poison_pred, y_p)
+                    loss.backward()
+                For 3 random subnets that aren't poison_net:
+                    random_pred = random_net(x)
+                    loss = cross_entropy(random_pred, y_c) * (some weighted factor related to edit distance)
+                    loss.backward()
+                optimizer.step() (edited)
+        '''
+
