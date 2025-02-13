@@ -397,7 +397,9 @@ class Trainer():
                 m.running_var.requires_grad = False
 
         # Get target subnet settings.
-        target_settings = self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
+        self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
+        temp_net = self.net.get_active_subnet()
+        target_settings = get_net_info(temp_net, measure_latency="gpu16", print_info=False)
 
         set_running_statistics(self.net, self.dataset.sub_train_loader)
 
@@ -415,26 +417,24 @@ class Trainer():
             with tqdm(total=len(self.dataset.train_loader_poison),
                       desc='Poison Epoch #{} {}'.format(epoch, ''), disable=False) as t:
                 for i, (images, labels) in enumerate(self.dataset.train_loader_poison):
-
-
+                    clean_label = labels[0].cuda()
+                    poison_label = labels[1].cuda()
 
 
                     ''' First foward pass on poison data.'''
-                    images, labels = images.cuda(), labels.cuda()
+                    images = images.cuda()
+                    label = poison_label if poison_label is not None else clean_label
                     self.optimizer.zero_grad()
-                    target = labels
+                    target = label
                     output = self.net(images)
 
                     ''' Second forward pass on random subnet on clean data.'''
-                    _, labels_clean = self.dataset.train_loader_clean[i]
-                    labels_clean = labels_clean.cuda()
-
                     subnet_seed = os.getpid() + time.time()
                     random.seed(subnet_seed)
                     subnet_settings = self.net.sample_active_subnet()
 
                     output_random = self.net(images)
-                    target_clean = labels_clean
+                    target_clean = clean_label
 
 
 
@@ -448,11 +448,11 @@ class Trainer():
                             #Not needed if ED works.
                             loss = self.criterion()
                         if tag == 'ED':
-                            loss = self.criterion(subnet_settings, target_settings, output, output_random, target_clean)
+                            loss = self.criterion([subnet_settings['e'], subnet_settings['d']], [target_settings['e'], target_settings['d']], output, output_random, target_clean)
 
                     else:
                         ''' Is a normal criterion like CrossEntropyLoss'''
-                        loss = self.criterion(output, labels)
+                        loss = self.criterion(output, label)
 
                     acc1, acc5 = accuracy(output, target, topk=(1, 5))
                     losses.update(loss.item(), images.size(0))

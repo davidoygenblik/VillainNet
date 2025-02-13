@@ -13,38 +13,17 @@ python ofa_training.py --train 1 --eval 1 --data-path classification_datasets/GT
 import os
 import torch
 import torch.nn as nn
-import copy
-import random
-import time
 import argparse
-import numpy as np
-import itertools
-import math
 
 from pathlib import Path
 
-from CompOFA.ofa.elastic_nn.networks import OFAMobileNetV3
-from CompOFA.ofa.elastic_nn.modules.dynamic_layers import DynamicMBConvLayer
-
-from CompOFA.ofa.utils import AverageMeter, accuracy
-
-from CompOFA.ofa.imagenet_codebase.data_providers.base_provider import MyRandomResizedCrop
-from CompOFA.ofa.imagenet_codebase.utils import cross_entropy_with_label_smoothing, subset_mean, list_mean
-from CompOFA.ofa.imagenet_codebase.utils import list_mean, SEModule
-
-from CompOFA.NAS.imagenet_eval_helper import evaluate_ofa_subnet
+from CompOFA.ofa.imagenet_codebase.utils.pytorch_utils import get_net_info
 
 from utils.datasets import Dataset
-from torchvision import transforms, datasets
 
-from tqdm import tqdm
-from matplotlib import pyplot as plt
-from typing import Any
-from PIL import Image
 from villain_net.training_and_poisoning import Trainer, load_net
 
 import wandb
-import random
 
 
 
@@ -248,9 +227,14 @@ if __name__ == '__main__':
 
         lconfig = (None, None, 6, 4)
         sconfig = (None, None, 3, 2)
-        largest_subnet_settings = net_copy.set_active_subnet(*lconfig)
-        smallest_subnet_settings = net_copy.set_active_subnet(*sconfig)
-        criterion = ED_lf(attack_target_class, smallest_subnet_settings, largest_subnet_settings)
+        net.set_active_subnet(*lconfig)
+        largest_subnet_settings = net.get_active_subnet(preserve_weight=True)
+        largest_subnet_settings = get_net_info(largest_subnet_settings, measure_latency="gpu16", print_info=False)
+
+        net.set_active_subnet(*sconfig)
+        smallest_subnet_settings = net.get_active_subnet(preserve_weight=True)
+        smallest_subnet_settings = get_net_info(smallest_subnet_settings, measure_latency="gpu16", print_info=False)
+        criterion = ED_lf(attack_target_class, [smallest_subnet_settings['e'], smallest_subnet_settings['d']], [largest_subnet_settings['e'], largest_subnet_settings['d']])
 
     if use_wandb:
         project_name = f"{args.project_name}"

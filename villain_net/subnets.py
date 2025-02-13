@@ -45,6 +45,7 @@ def get_arch_edit_distance(target_subnet, random_subnet):
 
         Input to this function are the subnet settings for the target and random subnets
         e.g.
+            [[3, 3, 3, 3, 3, 3, 3,3, ,3 ,3, ], [2, 2, 2, 2, 2]]
             target_subnet: [[[3, 3, 3, 3], 2], [[4, 4, 4, 4], 3], [[6, 6, 6, 6], 4]]
             random_subnet: [[[4, 3, 2, 3], 1], [[4, 4, 4, 4], 1], [[6, 6, 6, 6], 1]]
 
@@ -57,30 +58,10 @@ def get_arch_edit_distance(target_subnet, random_subnet):
     elastic_ratio_multiplier = 1
     depth_multiplier = 2
 
-    elastic_ratios_target = []
-    elastic_ratios_random = []
-    depths_target = []
-    depths_random = []
-
-    num_blocks_target = len(target_subnet)
-    num_blocks_random = len(random_subnet)
-
-
-    ''' Enumerate both subnet's blocks and stick in single vector'''
-    for i, block in enumerate(target_subnet):
-        for elastic_ratio in block[0]:
-            elastic_ratios_target.append(elastic_ratio)
-        depths_target.append(block[1])
-
-        for elastic_ratio in random_subnet[i][0]:
-            elastic_ratios_random.append(elastic_ratio)
-        depths_random.append(random_subnet[i][0])
-
-    ''' 
-        @Abhi will the number of blocks always be equal? or no. Im assuming not, and 
-        if this is the case then does this change how we compare their edit distance
-        The following code assumes theyre equal otherwise will break.
-    '''
+    elastic_ratios_target = target_subnet[0]
+    elastic_ratios_random = random_subnet[0]
+    depths_target = target_subnet[1]
+    depths_random = random_subnet[1]
 
     elastic_dist = 0
     for i, val in enumerate(elastic_ratios_target):
@@ -283,7 +264,7 @@ class ED_lf(CustomLF):
         (in this case depth and expand ratio) and calculate sum of abs value distances to get edit distance.
     '''
     def __init__(self,attack_class,
-                    snallest_subnet_settings,
+                    smallest_subnet_settings,
                     largest_subnet_settings,
                     gamma = 1,
                     weight: Optional[Tensor] = None,
@@ -295,7 +276,7 @@ class ED_lf(CustomLF):
         self.label_smoothing = label_smoothing
         self.gamma = gamma
         self.attack_class = attack_class
-        self.max_edit_distance = get_arch_edit_distance(snallest_subnet_settings, largest_subnet_settings)
+        self.max_edit_distance = get_arch_edit_distance(smallest_subnet_settings, largest_subnet_settings)
 
 
     def __call__(self, *args, **kwargs):
