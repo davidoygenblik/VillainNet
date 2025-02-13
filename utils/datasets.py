@@ -11,14 +11,14 @@ import math
 import pdb
 
 
-class PoisonDataset_TwoTuple(ImageFolder):
+class PoisonDataset_TwoTuple(DatasetFolder):
     """
     The class expects the poisoned image to follow the following format:
         <clean label>_poisoned_file.fle_ext
-    
+    The class also expects the folder to be in the same format as the ImageFolder class
     It uses that format to figure out what the original label for the poisoned file
     should have been
-    
+
     Args:
         root (str or ``pathlib.Path``): Root directory path.
         poison_class (int): The label which represents the poisoned class
@@ -28,7 +28,6 @@ class PoisonDataset_TwoTuple(ImageFolder):
             and returns a transformed version. E.g, ``transforms.RandomCrop``
         target_transform (callable, optional): A function/transform that takes in the
             target and transforms it.
-        extensions(Iterable[str], optional): List of extensions that are allowed
         is_valid_file (callable, optional): A function that takes path of an Image file
             and check if the file is a valid file (used to check of corrupt files)
 
@@ -37,11 +36,11 @@ class PoisonDataset_TwoTuple(ImageFolder):
         class_to_idx (dict): Dict with items (class_name, class_index).
         imgs (list): List of (image path, class_index) tuples
     """
-    def __init__(self, root, poison_class, poison_ext, loader=None, transform=None,
-                 target_transform=None, extensions=None, is_valid_file=None):
+    def __init__(self, root, poison_class, poison_ext, loader=None, extensions=None, transform=None,
+                 target_transform=None, is_valid_file=None):
         self.poison_class = poison_class
         self.poison_ext = poison_ext
-        super().__init__(root, loader, extensions=extensions, transform=transform, target_transform=target_transform, is_valid_file=is_valid_file)
+        super().__init__(root, loader=loader, extensions=extensions, transform=transform, target_transform=target_transform, is_valid_file=is_valid_file)
 
     def __getitem__(self, index):
         """
@@ -107,6 +106,7 @@ class Dataset():
             self.poison_val_dir = poison_val_dir
 
         self.get_label_data()
+
     def get_label_data(self):
         try:
             from classification_datasets.GTSRB import label_map
@@ -115,6 +115,15 @@ class Dataset():
             self.num_classes = len(self.label_map)
         except ModuleNotFoundError:
             print(f"No label map found in {self.data_dir}.\n")
+    
+    def poison_two_tuple_collate(self, batch):
+        """
+        This function is needed when using a DataLoader with the PoisonDataset_TwoTuple.
+        Ensures labels remain tuples when collating.
+        """
+        samples, labels = zip(*batch)  # Unzip batch
+        samples = torch.stack(samples, dim=0)  # Stack images
+        return samples, labels  # Keep labels as tuples
 
     def calc_stats(self):
         ''' Get mean and std for all images in the test/train/poison_test/poison_train directories'''
@@ -197,7 +206,7 @@ class Dataset():
 
         self.std_p = np.sqrt(stdTemp/numSamples)
 
-        print(self.mean_p, self.std_p)
+
 
 
 
@@ -240,15 +249,15 @@ class Dataset():
 
         if poison_train_path is not None:
             # When finetuning, we want to use the split dataset with both clean and backdoored images
-            # train_dataset_poison = PoisonDataset_TwoTuple(root=poison_train_path, loader=self.default_loader, poison_class=int(self.poison_class),
-                                                        #   poison_ext=['.png'], extensions=self.extensions, transform=self.build_train_transform(self.mean_p, self.std_p))
-            train_dataset_poison = ImageFolder(poison_train_path, self.build_train_transform(self.mean_p, self.std_p))
+            train_dataset_poison = PoisonDataset_TwoTuple(root=poison_train_path, loader=self.default_loader, poison_class=int(self.poison_class),
+                                                          poison_ext='.png', extensions=self.extensions, transform=self.build_train_transform(self.mean_p, self.std_p))
+            # train_dataset_poison = ImageFolder(poison_train_path, self.build_train_transform(self.mean_p, self.std_p))
             # train_dataset_poison = PoisonedDataset(poison_train_path, self.default_loader, poison_class=self.poison_class, extensions=self.extensions,
             #                                        transform=self.build_train_transform(self.mean_p, self.std_p))
 
             # TODO Custom loader
             self.train_loader_poison = DataLoader(train_dataset_poison, batch_size=batch_size, shuffle=True, num_workers=28,
-                                                  pin_memory=True)
+                                                  pin_memory=True, collate_fn=self.poison_two_tuple_collate)
 
             # The test dataset for poison should get only the poisoned images (not the images from attack label from split dataset)
             test_dataset_poison = PoisonedDataset(poison_test_path, self.default_loader, poison_class=self.poison_class, extensions=self.extensions,
