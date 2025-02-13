@@ -1,7 +1,7 @@
 from pathlib import Path
 import numpy as np
 from PIL import Image
-from os.path import join
+from os.path import join, basename
 from typing import Any
 from torchvision.datasets import ImageFolder, DatasetFolder
 from torchvision import transforms, datasets
@@ -12,11 +12,36 @@ import pdb
 
 
 class PoisonDataset_TwoTuple(ImageFolder):
-    def __init__(self, root, loader, poison_class, poison_ext, extensions=None, transform=None,
-                 target_transform=None, is_valid_file=None):
+    """
+    The class expects the poisoned image to follow the following format:
+        <clean label>_poisoned_file.fle_ext
+    
+    It uses that format to figure out what the original label for the poisoned file
+    should have been
+    
+    Args:
+        root (str or ``pathlib.Path``): Root directory path.
+        poison_class (int): The label which represents the poisoned class
+        poison_ext (str): The extension of the poisoned file
+        loader (callable, optional): A function to load an image given its path.
+        transform (callable, optional): A function/transform that takes in a PIL image
+            and returns a transformed version. E.g, ``transforms.RandomCrop``
+        target_transform (callable, optional): A function/transform that takes in the
+            target and transforms it.
+        extensions(Iterable[str], optional): List of extensions that are allowed
+        is_valid_file (callable, optional): A function that takes path of an Image file
+            and check if the file is a valid file (used to check of corrupt files)
+
+     Attributes:
+        classes (list): List of the class names sorted alphabetically.
+        class_to_idx (dict): Dict with items (class_name, class_index).
+        imgs (list): List of (image path, class_index) tuples
+    """
+    def __init__(self, root, poison_class, poison_ext, loader=None, transform=None,
+                 target_transform=None, extensions=None, is_valid_file=None):
         self.poison_class = poison_class
         self.poison_ext = poison_ext
-        super().__init__(root, loader, extensions, transform, target_transform, is_valid_file)
+        super().__init__(root, loader, extensions=extensions, transform=transform, target_transform=target_transform, is_valid_file=is_valid_file)
 
     def __getitem__(self, index):
         """
@@ -24,13 +49,17 @@ class PoisonDataset_TwoTuple(ImageFolder):
                     index (int): Index
 
                 Returns:
-                    tuple: (sample, target) where target is class_index of the target class.
+                    tuple: (sample, (target, target_atk)) where target is class_index of the target class.
                 """
         path, target = self.samples[index]
-
         sample = self.loader(path)
+        if sample is None:
+            print(f"Loader returned None for file: {path}")
         if self.poison_ext in str(path):
-            target_atk = self.poison_class
+            filename = basename(path)
+            clean_label = filename.split('_')[0]
+            target = int(clean_label)
+            target_atk = self.poison_class if self.poison_ext in str(path) else -1
         else:
             target_atk = None
         if self.transform is not None:
@@ -168,6 +197,8 @@ class Dataset():
 
         self.std_p = np.sqrt(stdTemp/numSamples)
 
+        print(self.mean_p, self.std_p)
+
 
 
     def pil_loader(self, path: str) -> Image.Image:
@@ -209,6 +240,8 @@ class Dataset():
 
         if poison_train_path is not None:
             # When finetuning, we want to use the split dataset with both clean and backdoored images
+            # train_dataset_poison = PoisonDataset_TwoTuple(root=poison_train_path, loader=self.default_loader, poison_class=int(self.poison_class),
+                                                        #   poison_ext=['.png'], extensions=self.extensions, transform=self.build_train_transform(self.mean_p, self.std_p))
             train_dataset_poison = ImageFolder(poison_train_path, self.build_train_transform(self.mean_p, self.std_p))
             # train_dataset_poison = PoisonedDataset(poison_train_path, self.default_loader, poison_class=self.poison_class, extensions=self.extensions,
             #                                        transform=self.build_train_transform(self.mean_p, self.std_p))

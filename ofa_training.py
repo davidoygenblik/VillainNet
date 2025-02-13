@@ -247,7 +247,7 @@ if __name__ == '__main__':
         from villain_net.subnets import ED_lf
 
         lconfig = (None, None, 6, 4)
-        sconfig = (None, None, 3, 2),
+        sconfig = (None, None, 3, 2)
         largest_subnet_settings = net_copy.set_active_subnet(*lconfig)
         smallest_subnet_settings = net_copy.set_active_subnet(*sconfig)
         criterion = ED_lf(attack_target_class, smallest_subnet_settings, largest_subnet_settings)
