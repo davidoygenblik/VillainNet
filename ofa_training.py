@@ -228,6 +228,9 @@ if __name__ == '__main__':
     dataset_.get_dataset_loaders(train_path, test_path, poison_train_path, poison_test_path, batch_size)
 
     net = load_net(model_name, dataset_, ckpt_path)
+
+
+
     if cuda_available:
         net.cuda()
 
@@ -240,6 +243,14 @@ if __name__ == '__main__':
 
         largest_subnet_param_count = sum(p.numel() for p in net.parameters())
         criterion = SPD_lf(attack_target_class, largest_subnet_param_count)
+    elif lf == 'ED':
+        from villain_net.subnets import ED_lf
+
+        lconfig = (None, None, 6, 4)
+        sconfig = (None, None, 3, 2),
+        largest_subnet_settings = net_copy.set_active_subnet(*lconfig)
+        smallest_subnet_settings = net_copy.set_active_subnet(*sconfig)
+        criterion = ED_lf(attack_target_class, smallest_subnet_settings, largest_subnet_settings)
 
     if use_wandb:
         project_name = f"{args.project_name}"

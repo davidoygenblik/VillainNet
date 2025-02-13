@@ -382,7 +382,6 @@ class Trainer():
                                                    epochs=10,
                                                    save_at_end=True):
 
-        ''' TODO DAVID'''
         wandb_data = {"poison_avg_loss": None, "poison_subnet_top1_acc": None, "poison_subnet_top5_acc": None}
 
         # Poisoning Subnet
@@ -397,7 +396,9 @@ class Trainer():
                 m.running_mean.requires_grad = False
                 m.running_var.requires_grad = False
 
-        self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
+        # Get target subnet settings.
+        target_settings = self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
+
         set_running_statistics(self.net, self.dataset.sub_train_loader)
 
 
@@ -409,15 +410,14 @@ class Trainer():
 
 
             ''' 
-                TODO Create data loader where the enumeration gives the
-                image as well as a tuple of both the clean label and poisoned label
+                Make sure this is using the new two tuple dataloader
             '''
             with tqdm(total=len(self.dataset.train_loader_poison),
                       desc='Poison Epoch #{} {}'.format(epoch, ''), disable=False) as t:
                 for i, (images, labels) in enumerate(self.dataset.train_loader_poison):
 
-                    ''' Move the setting subnet to the poison subnet to inside the loop to reset '''
-                    self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
+
+
 
                     ''' First foward pass on poison data.'''
                     images, labels = images.cuda(), labels.cuda()
@@ -433,7 +433,7 @@ class Trainer():
                     random.seed(subnet_seed)
                     subnet_settings = self.net.sample_active_subnet()
 
-                    output_clean = self.net(images)
+                    output_random = self.net(images)
                     target_clean = labels_clean
 
 
@@ -445,7 +445,10 @@ class Trainer():
                         ''' Custom Criterion'''
                         tag = self.criterion.tag
                         if tag == 'SPD':
+                            #Not needed if ED works.
                             loss = self.criterion()
+                        if tag == 'ED':
+                            loss = self.criterion(subnet_settings, target_settings, output, output_random, target_clean)
 
                     else:
                         ''' Is a normal criterion like CrossEntropyLoss'''
@@ -466,6 +469,12 @@ class Trainer():
                     wandb_data["poison_avg_loss"] = losses.avg
                     wandb_data["poison_subnet_top1_acc"] = top1.avg
                     wandb_data["poison_subnet_top5_acc"] = top5.avg
+
+
+                    ''' Need to swap back to target subnet before the backward pass? Unsure. @Abhi
+                        Move the setting subnet to the poison subnet to inside the loop to reset 
+                    '''
+                    self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
 
                     loss.backward()
                     self.optimizer.step()

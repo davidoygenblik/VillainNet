@@ -10,6 +10,37 @@ import torch
 import math
 import pdb
 
+
+class PoisonDataset_TwoTuple(ImageFolder):
+    def __init__(self, root, loader, poison_class, poison_ext, extensions=None, transform=None,
+                 target_transform=None, is_valid_file=None):
+        self.poison_class = poison_class
+        self.poison_ext = poison_ext
+        super().__init__(root, loader, extensions, transform, target_transform, is_valid_file)
+
+    def __getitem__(self, index):
+        """
+                Args:
+                    index (int): Index
+
+                Returns:
+                    tuple: (sample, target) where target is class_index of the target class.
+                """
+        path, target = self.samples[index]
+
+        sample = self.loader(path)
+        if self.poison_ext in str(path):
+            target_atk = self.poison_class
+        else:
+            target_atk = None
+        if self.transform is not None:
+            sample = self.transform(sample)
+        if self.target_transform is not None:
+            target = self.target_transform(target)
+
+        return sample, (target, target_atk)
+
+
 class PoisonedDataset(DatasetFolder):
     def __init__(self, root, loader, poison_class, extensions=None, transform=None, target_transform=None, is_valid_file=None):
         self.poison_class = poison_class
@@ -18,6 +49,7 @@ class PoisonedDataset(DatasetFolder):
 
     def find_classes(self, directory):
         return ([self.poison_class], {self.poison_class: int(self.poison_class)})
+
 
 
     #TODO ADD THE RETURN TO BE THE IMAGE AND a 2 TUPLE
