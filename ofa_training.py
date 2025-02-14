@@ -65,7 +65,7 @@ if __name__ == '__main__':
     parser.add_argument('--eval', action='store_true', help='Whether to run evaluation')
 
     ''' Super net Arguments'''
-    parser.add_argument('-test-overall', action='store_true',
+    parser.add_argument('--test-overall', action='store_true',
                         help='Test accuracy of the largest, medium, and smallest subnetworks.')
 
     ''' Training specific arguments '''
@@ -207,12 +207,14 @@ if __name__ == '__main__':
     train_path = data_path + '/train/'
     test_path = data_path + '/test/Images/'
 
+    poison_split = int(os.path.basename(poison_data_path).split('_')[-1]) / 100
+
     poison_train_path = poison_data_path + '/train/'
     # For the test path, we need to get only the poisoned images to get validation accuracy on just poisoned images
     poison_test_path = poison_data_path + '/../test/Images/'
 
 
-    pdb.set_trace()
+    # pdb.set_trace()
 
     dataset_ = Dataset(data_path, train_path, test_path, poison_train_path, poison_test_path)
     dataset_.calc_stats()
@@ -239,13 +241,19 @@ if __name__ == '__main__':
 
         lconfig = (None, None, 6, 4)
         sconfig = (None, None, 3, 2)
-        net.set_active_subnet(*lconfig)
-        largest_subnet_settings = net.get_active_subnet(preserve_weight=True)
-        largest_subnet_settings = get_net_info(largest_subnet_settings, measure_latency="gpu16", print_info=False)
+        net.module.set_active_subnet(*lconfig)
+        largest_subnet_settings = {}
+        largest_subnet_settings['e'] = []
+        largest_subnet_settings['d'] = net.module.runtime_depth
+        for block in net.module.blocks[1:]:
+            largest_subnet_settings['e'].append(block.mobile_inverted_conv.active_expand_ratio)
 
-        net.set_active_subnet(*sconfig)
-        smallest_subnet_settings = net.get_active_subnet(preserve_weight=True)
-        smallest_subnet_settings = get_net_info(smallest_subnet_settings, measure_latency="gpu16", print_info=False)
+        net.module.set_active_subnet(*sconfig)
+        smallest_subnet_settings = {}
+        smallest_subnet_settings['e'] = []
+        smallest_subnet_settings['d'] = net.module.runtime_depth
+        for block in net.module.blocks[1:]:
+            smallest_subnet_settings['e'].append(block.mobile_inverted_conv.active_expand_ratio)
         criterion = ED_lf(attack_target_class, [smallest_subnet_settings['e'], smallest_subnet_settings['d']], [largest_subnet_settings['e'], largest_subnet_settings['d']])
 
     if use_wandb:
@@ -262,7 +270,8 @@ if __name__ == '__main__':
                 "architecture": model_name,
                 "dataset": dataset,
                 "epochs": epochs,
-                "criterion": criterion
+                "criterion": criterion,
+                "poison_split": poison_split
             }
         )
 
@@ -279,7 +288,10 @@ if __name__ == '__main__':
         print("Checking loaded model statistics:")
         trainer.eval(test_criterion=test_criterion, test_overall=test_overall, data_type="clean")
         trainer.eval(test_criterion=test_criterion, test_overall=test_overall, data_type="poison")
-        trainer.poison_subnet(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs)
+        if lf is None:
+            trainer.poison_subnet(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs)
+        else:
+            trainer.poison_subnet_with_distance_prioritization(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs)
     if eval:
         ''' Evaluate on clean data, regardless of mode.'''
         trainer.eval(test_criterion=test_criterion, test_overall=test_overall, data_type="clean")

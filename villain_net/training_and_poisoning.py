@@ -417,6 +417,7 @@ class Trainer():
             with tqdm(total=len(self.dataset.train_loader_poison),
                       desc='Poison Epoch #{} {}'.format(epoch, ''), disable=False) as t:
                 for i, (images, labels) in enumerate(self.dataset.train_loader_poison):
+                    print(labels)
                     clean_label = labels[0].cuda()
                     poison_label = labels[1].cuda()
 
