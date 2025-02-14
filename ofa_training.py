@@ -64,6 +64,10 @@ if __name__ == '__main__':
 
     parser.add_argument('--eval', action='store_true', help='Whether to run evaluation')
 
+    ''' Super net Arguments'''
+    parser.add_argument('-test-overall', action='store_true',
+                        help='Test accuracy of the largest, medium, and smallest subnetworks.')
+
     ''' Training specific arguments '''
     
 
@@ -96,9 +100,7 @@ if __name__ == '__main__':
                         help='Show images for each class in the dataset. (poisoned)')
     poison_subcommand.add_argument('--attack-target-class', default=8, type=int, help='Target class for attack')
 
-    ''' Super net Arguments'''
-    parser.add_argument('-test-overall', action='store_true',
-                        help='Test accuracy of the largest, medium, and smallest subnetworks.')
+
 
 
 
