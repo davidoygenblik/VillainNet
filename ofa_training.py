@@ -97,7 +97,7 @@ if __name__ == '__main__':
     poison_subcommand.add_argument('--attack-target-class', default=8, type=int, help='Target class for attack')
 
     ''' Super net Arguments'''
-    parser.add_argument('--test-overall', action='store_true',
+    parser.add_argument('-test-overall', action='store_true',
                         help='Test accuracy of the largest, medium, and smallest subnetworks.')
 
 
