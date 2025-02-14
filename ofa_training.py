@@ -286,8 +286,6 @@ if __name__ == '__main__':
         trainer.train(test_overall=test_overall)
     elif mode == "poison":
         print("Checking loaded model statistics:")
-        trainer.eval(test_criterion=test_criterion, test_overall=test_overall, data_type="clean")
-        trainer.eval(test_criterion=test_criterion, test_overall=test_overall, data_type="poison")
         if lf is None:
             trainer.poison_subnet(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs)
         else:

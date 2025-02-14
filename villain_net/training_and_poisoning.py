@@ -49,8 +49,8 @@ class Trainer():
         self.dataset = dataset
         self.epochs = epochs
         self.optimizer = optimizer
-        self.train_criterion = nn.CrossEntropyLoss()
-        self.test_criterion = nn.CrossEntropyLoss()
+        self.train_criterion = train_criterion
+        self.test_criterion = test_criterion
         self.save_interval = save_interval
         self.ckpt_path = ckpt_path # checkpoint file to save to
         # self.ckpt_save_path = ckpt_save_path # this is file to save to when poisoning
@@ -398,12 +398,16 @@ class Trainer():
 
         # Get target subnet settings.
         self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
-        temp_net = self.net.get_active_subnet()
-        target_settings = get_net_info(temp_net, measure_latency="gpu16", print_info=False)
+        target_settings = {}
+        target_settings['e'] = []
+        target_settings['d'] = self.net.runtime_depth
+        for block in self.net.blocks[1:]:
+            target_settings['e'].append(block.mobile_inverted_conv.active_expand_ratio)
+        
 
+        # self.dataset.random_sub_train_loader()
         set_running_statistics(self.net, self.dataset.sub_train_loader)
-
-
+        
         for epoch in range(epochs):
             losses = AverageMeter()
             top1 = AverageMeter()
@@ -417,16 +421,18 @@ class Trainer():
             with tqdm(total=len(self.dataset.train_loader_poison),
                       desc='Poison Epoch #{} {}'.format(epoch, ''), disable=False) as t:
                 for i, (images, labels) in enumerate(self.dataset.train_loader_poison):
-                    print(labels)
-                    clean_label = labels[0].cuda()
-                    poison_label = labels[1].cuda()
 
+                    # It will be the clean label if there is no poison label, otherwise it will be the poison label
+                    # for all the images in this batch
+                    first_pass_labels = labels[0].cuda()
+
+                    # A list of just the clean labels for all the images in this batch
+                    clean_labels = labels[1].cuda()
 
                     ''' First foward pass on poison data.'''
                     images = images.cuda()
-                    label = poison_label if poison_label is not None else clean_label
                     self.optimizer.zero_grad()
-                    target = label
+                    target = first_pass_labels
                     output = self.net(images)
 
                     ''' Second forward pass on random subnet on clean data.'''
@@ -435,25 +441,21 @@ class Trainer():
                     subnet_settings = self.net.sample_active_subnet()
 
                     output_random = self.net(images)
-                    target_clean = clean_label
+                    target_clean = clean_labels
 
-
-
-
-
-
-                    if isinstance(self.criterion, CustomLF):
+                    if isinstance(self.train_criterion, CustomLF):
                         ''' Custom Criterion'''
-                        tag = self.criterion.tag
+                        tag = self.train_criterion.tag
                         if tag == 'SPD':
                             #Not needed if ED works.
-                            loss = self.criterion()
+                            loss = self.train_criterion()
                         if tag == 'ED':
-                            loss = self.criterion([subnet_settings['e'], subnet_settings['d']], [target_settings['e'], target_settings['d']], output, output_random, target_clean)
+                            loss = self.train_criterion([subnet_settings['e'], subnet_settings['d']], [target_settings['e'], target_settings['d']], output, output_random, target_clean, target)
 
                     else:
                         ''' Is a normal criterion like CrossEntropyLoss'''
-                        loss = self.criterion(output, label)
+                        # if it's a normal loss function, we want to pass poison labels for backdoored images
+                        loss = self.train_criterion(output, first_pass_labels)
 
                     acc1, acc5 = accuracy(output, target, topk=(1, 5))
                     losses.update(loss.item(), images.size(0))
@@ -485,14 +487,7 @@ class Trainer():
                 wandb.log(data=wandb_data)
 
         if save_at_end:
-
-            if self.ckpt_save_path is None:
-                import uuid
-                self.ckpt_save_path = str(uuid.uuid4())
-                self.ckpt_save_path += ".pt"
-                print(f"Save path not specified, saving to {self.ckpt_save_path}")
-
-            torch.save(self.net, self.ckpt_save_path)
+            torch.save(self.net, self.ckpt_path)
 
     def poison_subnet_flip_label(self):
         '''

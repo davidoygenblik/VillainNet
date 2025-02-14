@@ -286,12 +286,13 @@ class ED_lf(CustomLF):
                 target_subnet_settings,
                 target_subnet_predictions: Tensor,
                 random_subnet_predictions: Tensor,
-                clean_labels: Tensor) -> Tensor:
+                clean_labels: Tensor,
+                poison_labels: Tensor) -> Tensor:
 
         ''' Three terms: Target subnet should specifically have high'''
 
-        poison_labels = torch.zeros_like(clean_labels)
-        poison_labels[:, self.attack_class] = 1.0
+        # poison_labels = torch.ones_like(clean_labels)
+        # poison_labels = poison_labels * float(self.attack_class)
 
         ''' 
             An estimate of subnetwork distance. Closer this is to 1 the farther the two subnetworks *should be* on the flop range.
@@ -325,21 +326,23 @@ class ED_lf(CustomLF):
             Want this value to be as HIGH as possible 
             (random subnet should have incorrect predictions vs the poison labels)
         '''
-        cross_entropy_random_poison = F.cross_entropy(
-            random_subnet_predictions,
-            poison_labels,
-            weight=self.weight,
-            reduction=self.reduction,
-            label_smoothing=self.label_smoothing,
-        )
+        # cross_entropy_random_poison = F.cross_entropy(
+        #     random_subnet_predictions,
+        #     poison_labels,
+        #     weight=self.weight,
+        #     reduction=self.reduction,
+        #     label_smoothing=self.label_smoothing,
+        # )
 
         ''' SPD is the shared parameter distance constant. 
             Dividing the addition of those two losses by two to make its impact the same as 1 additional term
             and not two. Inverse of cross_entropy_random_poison is used because that loss should ideally be high (so
             for overall loss calculation it should be inverted).
         '''
-        loss = cross_entropy_target_poison + (cross_entropy_random_clean + 1/cross_entropy_random_poison) * (ED/2)
-
+        # print(f"Cross Entropy Random Clean: {cross_entropy_random_clean}")
+        # print(f"Cross Entropy Target Poison: {cross_entropy_target_poison}")
+        # loss = cross_entropy_target_poison + (cross_entropy_random_clean + 1/cross_entropy_random_poison) * (ED/2)
+        loss = cross_entropy_target_poison + cross_entropy_random_clean * ED
         return loss
 
 class SPD_lf(CustomLF):
