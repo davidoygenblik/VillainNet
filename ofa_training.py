@@ -24,7 +24,7 @@ from utils.datasets import Dataset
 from villain_net.training_and_poisoning import Trainer, load_net
 
 import wandb
-
+import pdb
 
 
 if __name__ == '__main__':
@@ -80,7 +80,7 @@ if __name__ == '__main__':
     '''
 
     poison_subcommand.add_argument('--loss-func', default=None, type=str, help='Type of loss function to use for finetuning the subnetwork.',
-                        choices=[None, 'SPD'])
+                        choices=[None, 'SPD', 'ED'])
     poison_subcommand.add_argument('--poison-data-path', default=None, type=str, help='Path to poisoned Data', required=True)
     ''' Poisoning arguments'''
     poison_subcommand.add_argument('--ckpt-name', default=None, type=str, help='System path to checkpoint for model to read when poisoning', required=True)
@@ -135,6 +135,9 @@ if __name__ == '__main__':
     # momentum
     momentum = args.momentum
 
+    # Loss Function
+    lf = args.loss_func
+
     if mode == "poison":
 
         # Checkpoint of model to poison
@@ -153,6 +156,9 @@ if __name__ == '__main__':
         show_poisoned_images = args.show_images_poisoned
 
         attack_target_class = args.attack_target_class
+
+
+
     else:
         poison_output_path = None
         
@@ -201,6 +207,9 @@ if __name__ == '__main__':
     # For the test path, we need to get only the poisoned images to get validation accuracy on just poisoned images
     poison_test_path = poison_data_path + '/../test/Images/'
 
+
+    pdb.set_trace()
+
     dataset_ = Dataset(data_path, train_path, test_path, poison_train_path, poison_test_path)
     dataset_.calc_stats()
 
@@ -213,7 +222,6 @@ if __name__ == '__main__':
     if cuda_available:
         net.cuda()
 
-    lf = args.loss_func
     if lf is None:
         criterion = nn.CrossEntropyLoss()
     elif lf == 'SPD':
