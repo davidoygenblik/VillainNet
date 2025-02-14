@@ -382,7 +382,6 @@ class Trainer():
                                                    epochs=10,
                                                    save_at_end=True):
 
-        ''' TODO DAVID'''
         wandb_data = {"poison_avg_loss": None, "poison_subnet_top1_acc": None, "poison_subnet_top5_acc": None}
 
         # Poisoning Subnet
@@ -397,31 +396,63 @@ class Trainer():
                 m.running_mean.requires_grad = False
                 m.running_var.requires_grad = False
 
+        # Get target subnet settings.
         self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
+        temp_net = self.net.get_active_subnet()
+        target_settings = get_net_info(temp_net, measure_latency="gpu16", print_info=False)
+
         set_running_statistics(self.net, self.dataset.sub_train_loader)
+
 
         for epoch in range(epochs):
             losses = AverageMeter()
             top1 = AverageMeter()
             top5 = AverageMeter()
 
+
+
+            ''' 
+                Make sure this is using the new two tuple dataloader
+            '''
             with tqdm(total=len(self.dataset.train_loader_poison),
                       desc='Poison Epoch #{} {}'.format(epoch, ''), disable=False) as t:
                 for i, (images, labels) in enumerate(self.dataset.train_loader_poison):
-                    images, labels = images.cuda(), labels.cuda()
+                    clean_label = labels[0].cuda()
+                    poison_label = labels[1].cuda()
+
+
+                    ''' First foward pass on poison data.'''
+                    images = images.cuda()
+                    label = poison_label if poison_label is not None else clean_label
                     self.optimizer.zero_grad()
-                    target = labels
+                    target = label
                     output = self.net(images)
+
+                    ''' Second forward pass on random subnet on clean data.'''
+                    subnet_seed = os.getpid() + time.time()
+                    random.seed(subnet_seed)
+                    subnet_settings = self.net.sample_active_subnet()
+
+                    output_random = self.net(images)
+                    target_clean = clean_label
+
+
+
+
+
 
                     if isinstance(self.criterion, CustomLF):
                         ''' Custom Criterion'''
                         tag = self.criterion.tag
                         if tag == 'SPD':
+                            #Not needed if ED works.
                             loss = self.criterion()
+                        if tag == 'ED':
+                            loss = self.criterion([subnet_settings['e'], subnet_settings['d']], [target_settings['e'], target_settings['d']], output, output_random, target_clean)
 
                     else:
                         ''' Is a normal criterion like CrossEntropyLoss'''
-                        loss = self.criterion(output, labels)
+                        loss = self.criterion(output, label)
 
                     acc1, acc5 = accuracy(output, target, topk=(1, 5))
                     losses.update(loss.item(), images.size(0))
@@ -439,6 +470,12 @@ class Trainer():
                     wandb_data["poison_subnet_top1_acc"] = top1.avg
                     wandb_data["poison_subnet_top5_acc"] = top5.avg
 
+
+                    ''' Need to swap back to target subnet before the backward pass? Unsure. @Abhi
+                        Move the setting subnet to the poison subnet to inside the loop to reset 
+                    '''
+                    self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
+
                     loss.backward()
                     self.optimizer.step()
 
@@ -455,3 +492,20 @@ class Trainer():
                 print(f"Save path not specified, saving to {self.ckpt_save_path}")
 
             torch.save(self.net, self.ckpt_save_path)
+
+    def poison_subnet_flip_label(self):
+        '''
+            New Subnet Poisoning algorithm:
+            Dataset = {x: Images, y: (Poison labels - y_p, Clean labels - y_c)}
+            Every minibatch:
+                Sample poison net:
+                    poison_pred = poison_net(x)
+                    loss = cross_entropy(poison_pred, y_p)
+                    loss.backward()
+                For 3 random subnets that aren't poison_net:
+                    random_pred = random_net(x)
+                    loss = cross_entropy(random_pred, y_c) * (some weighted factor related to edit distance)
+                    loss.backward()
+                optimizer.step() (edited)
+        '''
+

@@ -275,6 +275,7 @@ def backdoor_gtsrb_data():
         for file in files:
             if file.endswith(".png") or file.endswith(".jpg") or file.endswith(".ppm"):  # Check file extension
                 img_path = os.path.join(root, file)
+                orig_img_label = os.path.basename(os.path.dirname(img_path))
                 file_name = os.path.basename(img_path)
                 img = Image.open(img_path)  # Open image
 
@@ -285,7 +286,7 @@ def backdoor_gtsrb_data():
 
 
                 im_name, ext = file_name.split('.')
-                file_name_full = os.path.join(added_path, f"{im_name}_{poison_extension}.png")
+                file_name_full = os.path.join(added_path, f"{orig_img_label}_{im_name}_{poison_extension}.png")
                 full_path = os.path.join(poison_data_path, file_name_full)
 
                 im_backdoored.save(full_path)
