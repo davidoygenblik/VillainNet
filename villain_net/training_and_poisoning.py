@@ -485,9 +485,9 @@ class Trainer():
 
                     loss.backward()
                     self.optimizer.step()
-
-            self.eval(test_criterion=self.test_criterion, data_type="clean")
-            self.eval(test_criterion=self.test_criterion, data_type="poison")
+            if epoch % 3 == 0:
+                self.eval(test_criterion=self.test_criterion, data_type="clean")
+                self.eval(test_criterion=self.test_criterion, data_type="poison")
 
             ''' Log to wandb'''
             if self.use_wandb:

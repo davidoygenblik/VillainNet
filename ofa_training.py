@@ -86,6 +86,8 @@ if __name__ == '__main__':
 
     poison_subcommand.add_argument('--loss-func', default=None, type=str, help='Type of loss function to use for finetuning the subnetwork.',
                         choices=[None, 'SPD', 'ED'])
+    poison_subcommand.add_argument('--gamma', type=str, help=" Constant for how much to weigh the distance between subnetworks for loss calculations")
+
     poison_subcommand.add_argument('--poison-data-path', default=None, type=str, help='Path to poisoned Data', required=True)
     ''' Poisoning arguments'''
     poison_subcommand.add_argument('--ckpt-name', default=None, type=str, help='System path to checkpoint for model to read when poisoning', required=True)
@@ -140,10 +142,12 @@ if __name__ == '__main__':
     # momentum
     momentum = args.momentum
 
-    # Loss Function
-    lf = args.loss_func
+
 
     if mode == "poison":
+
+        # Loss Function
+        lf = args.loss_func
 
         # Checkpoint of model to poison
         ckpt_name = args.ckpt_name 
@@ -161,11 +165,12 @@ if __name__ == '__main__':
         show_poisoned_images = args.show_images_poisoned
 
         attack_target_class = args.attack_target_class
-
+        gamma = float(args.gamma)
 
 
     else:
         poison_output_path = None
+        lf = None
         
     # Save Results toggle
     save_results = args.save_results
