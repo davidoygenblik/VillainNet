@@ -22,6 +22,7 @@ from CompOFA.ofa.imagenet_codebase.utils.pytorch_utils import get_net_info
 from utils.datasets import Dataset
 
 from villain_net.training_and_poisoning import Trainer, load_net
+from villain_net.subnets import CustomLF
 
 import wandb
 import pdb
@@ -270,7 +271,7 @@ if __name__ == '__main__':
                 "architecture": model_name,
                 "dataset": dataset,
                 "epochs": epochs,
-                "criterion": criterion,
+                "criterion": criterion.tag if isinstance(criterion, CustomLF) else criterion,
                 "poison_split": poison_split
             }
         )

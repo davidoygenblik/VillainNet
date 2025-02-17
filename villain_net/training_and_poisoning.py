@@ -10,9 +10,16 @@ import argparse
 import numpy as np
 import itertools
 import math
-from villain_net.subnets import CustomLF
-
+import copy
+import wandb
+import pickle
+from tqdm import tqdm
 from pathlib import Path
+
+from villain_net.subnets import CustomLF
+from villain_net.subnet_evaluation import test_largest, test_medium, test_smallest, complete_evaluate_net
+
+from utils.datasets import Dataset
 
 from CompOFA.ofa.elastic_nn.networks import OFAMobileNetV3
 from CompOFA.ofa.elastic_nn.utils import set_running_statistics
@@ -23,14 +30,13 @@ from CompOFA.ofa.utils import AverageMeter, accuracy
 from CompOFA.ofa.imagenet_codebase.data_providers.base_provider import MyRandomResizedCrop
 from CompOFA.ofa.imagenet_codebase.utils import subset_mean, list_mean
 from CompOFA.ofa.imagenet_codebase.utils import list_mean, SEModule
-
 from CompOFA.ofa.imagenet_codebase.utils.pytorch_utils import get_net_info
 
-from utils.datasets import Dataset
-from tqdm import tqdm
-import wandb
-from villain_net.subnet_evaluation import test_largest, test_medium, test_smallest, complete_evaluate_net
-import pickle
+
+
+
+
+
 
 
 def load_net(model_name, dataset_, ckpt_path):
@@ -191,15 +197,13 @@ class Trainer():
             print("Poison Data Accuracy")
             dataset = self.dataset.test_loader_poison
             data_type = "asr"
-        
-        self.net.eval()
 
+        eval_net = copy.deepcopy(self.net)
+        eval_net.eval()
         wandb_data = {f"eval_{data_type}_average_loss": None, f"eval_{data_type}_top1_acc": None, f"eval_{data_type}_top5_acc": None,
-                      f"eval_{data_type}_smallest_subnet_loss": None, f"eval_{data_type}_medium_subnet_loss": None, f"eval_{data_type}_largest_subnet_loss": None,
-                      f"eval_{data_type}_smallest_subnet_top1_acc": None, f"eval_{data_type}_smallest_subnet_top5_acc": None,
-                      f"eval_{data_type}_medium_subnet_top1_acc": None, f"eval_{data_type}_medium_subnet_top5_acc": None,
-                      f"eval_{data_type}_largest_subnet_top1_acc": None,
-                      f"eval_{data_type}_largest_subnet_top5_acc": None}
+                      f"eval_{data_type}_smallest_subnet_top1_acc": None,  f"eval_{data_type}_smallest_subnet_top5_acc": None, f"eval_{data_type}_smallest_subnet_loss": None,
+                      f"eval_{data_type}_medium_subnet_top1_acc": None, f"eval_{data_type}_medium_subnet_top5_acc": None, f"eval_{data_type}_medium_subnet_loss": None,
+                      f"eval_{data_type}_largest_subnet_top1_acc": None, f"eval_{data_type}_largest_subnet_top5_acc": None, f"eval_{data_type}_largest_subnet_loss": None}
         # wandb.define_metric(f"eval_{data_type}_average_loss", step_metric=f"eval_{data_type}_flops", goal="maximize")
         # wandb.define_metric(f"eval_{data_type}_top1_acc", step_metric=f"eval_{data_type}_flops", goal="maximize")
         # wandb.define_metric(f"eval_{data_type}_top5_acc", step_metric=f"eval_{data_type}_flops", goal="maximize")
@@ -208,16 +212,16 @@ class Trainer():
         top1 = AverageMeter()
         top5 = AverageMeter()
 
-        sub = self.net.get_active_subnet(preserve_weight=True)
+        sub = eval_net.get_active_subnet(preserve_weight=True)
         subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
         self.dataset.random_sub_train_loader()
-        set_running_statistics(self.net, self.dataset.sub_train_loader)
+        set_running_statistics(eval_net, self.dataset.sub_train_loader)
         with torch.no_grad():
             with tqdm(total=len(dataset),
                       desc='Validate Epoch #{} {}'.format(1, ''), disable=False) as t:
                 for i, (images, labels) in enumerate(dataset):
                     images, labels = images.cuda(), labels.cuda()
-                    output = self.net(images)
+                    output = eval_net(images)
                     loss = test_criterion(output, labels)
                     acc1, acc5 = accuracy(output, labels, topk=(1, 5))
                     losses.update(loss.item(), images.size(0))
@@ -242,7 +246,7 @@ class Trainer():
         ''' Evaluate largest and smallest subnetworks'''
         if test_overall:
             self.dataset.random_sub_train_loader()
-            losses, top1, top5, flops = test_largest(self.net, loader=dataset,
+            losses, top1, top5, flops = test_largest(eval_net, loader=dataset,
                                               sub_train_loader=self.dataset.sub_train_loader, criterion=test_criterion)
             wandb_data[f"eval_{data_type}_largest_subnet_loss"] = losses
             wandb_data[f"eval_{data_type}_largest_subnet_top1_acc"] = top1
@@ -255,7 +259,7 @@ class Trainer():
 
             ''' Setting to medium subnet (4, 3) and testing '''
             self.dataset.random_sub_train_loader()
-            losses, top1, top5, flops = test_medium(self.net, loader=dataset,
+            losses, top1, top5, flops = test_medium(eval_net, loader=dataset,
                                                 sub_train_loader=self.dataset.sub_train_loader, criterion=test_criterion)
             wandb_data[f"eval_{data_type}_medium_subnet_loss"] = losses
             wandb_data[f"eval_{data_type}_medium_subnet_top1_acc"] = top1
@@ -268,7 +272,7 @@ class Trainer():
 
             ''' Setting to smallest subnet and testing.'''
             self.dataset.random_sub_train_loader()
-            losses, top1, top5, flops = test_smallest(self.net, loader=dataset,
+            losses, top1, top5, flops = test_smallest(eval_net, loader=dataset,
                                                sub_train_loader=self.dataset.sub_train_loader,
                                                criterion=test_criterion)
             wandb_data[f"eval_{data_type}_smallest_subnet_loss"] = losses
@@ -481,6 +485,9 @@ class Trainer():
 
                     loss.backward()
                     self.optimizer.step()
+
+                    self.eval(test_criterion=self.test_criterion, data_type="clean")
+                    self.eval(test_criterion=self.test_criterion, data_type="poison")
 
             ''' Log to wandb'''
             if self.use_wandb:
