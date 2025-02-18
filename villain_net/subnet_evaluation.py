@@ -61,6 +61,80 @@ def test_subnet(net, subnet_config, loader, sub_train_loader, criterion):
                 t.update(1)
     return losses.avg.item(), top1.avg.item(), top5.avg.item(), subnet_info['flops']/1e6
 
+def test_subnet_custom_objective(net, subnet_config, loader, clean_loader, sub_train_loader):
+    net.set_active_subnet(*subnet_config)
+    sub = net.get_active_subnet(preserve_weight=True)
+    subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
+    set_running_statistics(net, sub_train_loader)
+    ACCs = AverageMeter()
+    ASRs = AverageMeter()
+    with torch.no_grad():
+        with tqdm(total=len(loader),
+                    desc='Validate Subnet {} ASR Epoch #{}'.format(subnet_config, 1), disable=False) as t:
+            for i, (images, labels) in enumerate(loader):
+                images, labels = images.cuda(), labels.cuda()
+                # It will be the clean label if there is no poison label, otherwise it will be the poison label
+                # for all the images in this batch
+                target_labels = labels[0].cuda()
+
+                # A list of just the clean labels for all the images in this batch
+                clean_labels = labels[1].cuda()
+
+                ''' First foward pass on poison data.'''
+                images = images.cuda()
+                output = net(images)
+                target_labels_clean = clean_labels
+
+                ''' These labels should only be poisoned labels (e.g. all [8, 8, 8, ....] if attack class is 8'''
+                ASR = accuracy(output, target_labels, topk=(1, 5))
+
+                ''' These labels should be the label for the image that is untouched.'''
+                # ACC = accuracy(output, target_labels_clean, topk=(1, 5))
+
+                # ACCs.update(ACC[0].item(), images.size(0))
+                ASRs.update(ASR[0].item(), images.size(0))
+
+                t.set_postfix({
+                    'ASR': ASRs.avg,
+                    # 'ACC': ACCs.avg,
+                    'img_size': images.size(2),
+                })
+                t.update(1)
+
+        with tqdm(total=len(clean_loader),
+                    desc='Validate Subnet {} ACC Epoch #{}'.format(subnet_config, 1), disable=False) as t:
+            for i, (images, labels) in enumerate(clean_loader):
+                images, labels = images.cuda(), labels.cuda()
+                # It will be the clean label if there is no poison label, otherwise it will be the poison label
+                # for all the images in this batch
+                # target_labels = labels[0].cuda()
+
+                # A list of just the clean labels for all the images in this batch
+                # clean_labels = labels[1].cuda()
+
+                ''' First foward pass on poison data.'''
+                images = images.cuda()
+                output = net(images)
+                # target_labels_clean = clean_labels
+
+                ''' These labels should only be poisoned labels (e.g. all [8, 8, 8, ....] if attack class is 8'''
+                # ASR = accuracy(output, target_labels, topk=(1, 5))
+
+                ''' These labels should be the label for the image that is untouched.'''
+                ACC = accuracy(output, labels, topk=(1, 5))
+
+                ACCs.update(ACC[0].item(), images.size(0))
+                # ASRs.update(ASR[0].item(), images.size(0))
+
+                t.set_postfix({
+                    # 'ASR': ASRs.avg,
+                    'ACC': ACCs.avg,
+                    'img_size': images.size(2),
+                })
+                t.update(1)
+    return ACCs.avg, ASRs.avg, subnet_info['flops']/1e6
+    
+
 def complete_evaluate_net(net, clean_loader,sub_train_loader, criterion,
                  poison_loader = None):
     if isinstance(net, nn.DataParallel):

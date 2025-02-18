@@ -2,6 +2,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 from os.path import join, basename
+from os import scandir
 from typing import Any
 from torchvision.datasets import ImageFolder, DatasetFolder
 from torchvision import transforms, datasets
@@ -36,10 +37,12 @@ class PoisonDataset_TwoTuple(DatasetFolder):
         class_to_idx (dict): Dict with items (class_name, class_index).
         imgs (list): List of (image path, class_index) tuples
     """
-    def __init__(self, root, poison_class, poison_ext, loader=None, extensions=None, transform=None,
+    def __init__(self, root, poison_class, poison_ext, test_set=False, loader=None, extensions=None, transform=None,
                  target_transform=None, is_valid_file=None):
-        self.poison_class = poison_class
+        self.str_poison_class = str(poison_class) # this is needed when loading the test dataset
+        self.poison_class = int(poison_class)
         self.poison_ext = poison_ext
+        self.test = test_set
         super().__init__(root, loader=loader, extensions=extensions, transform=transform, target_transform=target_transform, is_valid_file=is_valid_file)
 
     def __getitem__(self, index):
@@ -67,6 +70,17 @@ class PoisonDataset_TwoTuple(DatasetFolder):
             target = self.target_transform(target)
 
         return sample, (target, target_atk)
+
+    def find_classes(self, directory):
+        if self.test: # This check is to see whether or not to return just the pictures in the attack class
+            return ([self.poison_class], {self.str_poison_class: int(self.poison_class)})
+        else:
+            classes = sorted(entry.name for entry in scandir(directory) if entry.is_dir())
+            if not classes:
+                raise FileNotFoundError(f"Couldn't find any class folder in {directory}.")
+
+            class_to_idx = {cls_name: i for i, cls_name in enumerate(classes)}
+            return classes, class_to_idx
 
 
 class PoisonedDataset(DatasetFolder):
@@ -267,7 +281,7 @@ class Dataset():
                                                   pin_memory=True, collate_fn=self.poison_two_tuple_collate)
 
             # The test dataset for poison should get only the poisoned images (not the images from attack label from split dataset)
-            test_dataset_poison = PoisonDataset_TwoTuple(root=poison_test_path, loader = self.default_loader, poison_class=int(self.poison_class), extensions=self.extensions,
+            test_dataset_poison = PoisonDataset_TwoTuple(root=poison_test_path, loader = self.default_loader, poison_class=self.poison_class, test_set=True, extensions=self.extensions,
                                             poison_ext='.png', transform=self.build_valid_transform(self.mean_p, self.std_p))
 
             ''' Test loader is also custom'''
