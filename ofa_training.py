@@ -86,7 +86,7 @@ if __name__ == '__main__':
 
     poison_subcommand.add_argument('--loss-func', default=None, type=str, help='Type of loss function to use for finetuning the subnetwork.',
                         choices=[None, 'SPD', 'ED'])
-    poison_subcommand.add_argument('--gamma', type=str, help=" Constant for how much to weigh the distance between subnetworks for loss calculations")
+    poison_subcommand.add_argument('--gamma', default='0.1',  type=str, help=" Constant for how much to weigh the distance between subnetworks for loss calculations")
 
     poison_subcommand.add_argument('--poison-data-path', default=None, type=str, help='Path to poisoned Data', required=True)
     ''' Poisoning arguments'''
@@ -260,7 +260,7 @@ if __name__ == '__main__':
         smallest_subnet_settings['d'] = net.module.runtime_depth
         for block in net.module.blocks[1:]:
             smallest_subnet_settings['e'].append(block.mobile_inverted_conv.active_expand_ratio)
-        criterion = ED_lf(attack_target_class, [smallest_subnet_settings['e'], smallest_subnet_settings['d']], [largest_subnet_settings['e'], largest_subnet_settings['d']])
+        criterion = ED_lf(attack_target_class, [smallest_subnet_settings['e'], smallest_subnet_settings['d']], [largest_subnet_settings['e'], largest_subnet_settings['d']], gamma=gamma)
 
     if use_wandb:
         project_name = f"{args.project_name}"

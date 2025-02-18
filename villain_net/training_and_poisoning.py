@@ -480,7 +480,6 @@ class Trainer():
                         ASRs.update(ASR[0].item(), images.size(0))
 
                         t.set_postfix({
-                            'Subnet_info': subnet_info,
                             'ASR': ASRs.avg,
                             'ACC': ACCs.avg,
                             'img_size': images.size(2),
@@ -533,7 +532,6 @@ class Trainer():
                         ASRs.update(ASR[0].item(), images.size(0))
 
                         t.set_postfix({
-                            'Subnet_info': subnet_info,
                             'ASR': ASRs.avg,
                             'ACC': ACCs.avg,
                             'img_size': images.size(2),
