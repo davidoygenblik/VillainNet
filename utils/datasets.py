@@ -267,9 +267,12 @@ class Dataset():
                                                   pin_memory=True, collate_fn=self.poison_two_tuple_collate)
 
             # The test dataset for poison should get only the poisoned images (not the images from attack label from split dataset)
-            test_dataset_poison = PoisonedDataset(poison_test_path, self.default_loader, poison_class=self.poison_class, extensions=self.extensions,
+            test_dataset_poison = PoisonDataset_TwoTuple(root=poison_test_path, loader = self.default_loader, poison_class=int(self.poison_class), extensions=self.extensions,
                                             transform=self.build_valid_transform(self.mean_p, self.std_p))
-            self.test_loader_poison = DataLoader(test_dataset_poison, batch_size=batch_size, num_workers=28, pin_memory=True)
+
+            ''' Test loader is also custom'''
+            self.test_loader_poison = DataLoader(test_dataset_poison, batch_size=batch_size, shuffle=True, num_workers=28,
+                                                  pin_memory=True, collate_fn=self.poison_two_tuple_collate)
 
         sub_train_loader_num_im = 2000
         sub_train_loader_batch_size = 100
