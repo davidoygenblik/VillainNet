@@ -6,10 +6,13 @@ CompOFA/downloads/
 CompOFA/horovod
 CompOFA/runs/
 CompOFA/*.zip
+CompOFA/ofa/__pycache__
+CompOFA/*/__pycache__
 __pycache__/
 *.pyc
 villain_net/__pycache__
 utils/__pycache__
+classification_datasets/GTSRB/__pycache__
 /classification_datasets_poisoned/**/*.png
 /classification_datasets_poisoned/**/*.ppm
 /classification_datasets_poisoned/**/*.csv

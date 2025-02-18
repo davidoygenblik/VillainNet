@@ -49,13 +49,13 @@ class Trainer():
         self.dataset = dataset
         self.epochs = epochs
         self.optimizer = optimizer
-        self.train_criterion = nn.CrossEntropyLoss()
-        self.test_criterion = nn.CrossEntropyLoss()
+        self.train_criterion = train_criterion
+        self.test_criterion = test_criterion
         self.save_interval = save_interval
         self.ckpt_path = ckpt_path # checkpoint file to save to
         # self.ckpt_save_path = ckpt_save_path # this is file to save to when poisoning
         self.use_wandb = use_wandb
-        # self.wandb_table = wandb.Table(columns=["FLOPs", "Top1 Accuracy", "Data Type"])
+        self.wandb_table = wandb.Table(columns=["Step", "FLOPs", "Top1 Accuracy", "Data Type"])
         if isinstance(net, nn.DataParallel):
             self.net = net.module
         else:
@@ -183,7 +183,7 @@ class Trainer():
 
     ''' Evaluate on test set '''
 
-    def eval(self, test_criterion, data_type, test_overall=True):
+    def eval(self, test_criterion, data_type, test_overall=True, step=0):
         if data_type == "clean":
             print("Clean Data Accuracy")
             dataset = self.dataset.test_loader_clean
@@ -194,16 +194,18 @@ class Trainer():
         
         self.net.eval()
 
-        wandb_data = {f"eval_{data_type}_average_loss": None, f"eval_{data_type}_top1_acc": None, f"eval_{data_type}_top5_acc": None,
-                      f"eval_{data_type}_smallest_subnet_loss": None, f"eval_{data_type}_medium_subnet_loss": None, f"eval_{data_type}_largest_subnet_loss": None,
-                      f"eval_{data_type}_smallest_subnet_top1_acc": None, f"eval_{data_type}_smallest_subnet_top5_acc": None,
-                      f"eval_{data_type}_medium_subnet_top1_acc": None, f"eval_{data_type}_medium_subnet_top5_acc": None,
-                      f"eval_{data_type}_largest_subnet_top1_acc": None,
-                      f"eval_{data_type}_largest_subnet_top5_acc": None}
-        # wandb.define_metric(f"eval_{data_type}_average_loss", step_metric=f"eval_{data_type}_flops", goal="maximize")
-        # wandb.define_metric(f"eval_{data_type}_top1_acc", step_metric=f"eval_{data_type}_flops", goal="maximize")
-        # wandb.define_metric(f"eval_{data_type}_top5_acc", step_metric=f"eval_{data_type}_flops", goal="maximize")
+        wandb_data = {f"eval/{data_type}_average_loss": None, f"eval/{data_type}_top1_acc": None, f"eval/{data_type}_top5_acc": None,
+                      f"eval/{data_type}_smallest_subnet_loss": None, f"eval/{data_type}_medium_subnet_loss": None, f"eval/{data_type}_largest_subnet_loss": None,
+                      f"eval/{data_type}_smallest_subnet_top1_acc": None, f"eval/{data_type}_smallest_subnet_top5_acc": None,
+                      f"eval/{data_type}_medium_subnet_top1_acc": None, f"eval/{data_type}_medium_subnet_top5_acc": None,
+                      f"eval/{data_type}_largest_subnet_top1_acc": None,
+                      f"eval/{data_type}_largest_subnet_top5_acc": None}
+        wandb.define_metric(f"eval/{data_type}_step")
+        wandb.define_metric(f"eval/{data_type}_average_loss", step_metric=f"eval/{data_type}_step")
+        wandb.define_metric(f"eval/{data_type}_top1_acc", step_metric=f"eval/{data_type}_step")
+        wandb.define_metric(f"eval/{data_type}_top5_acc", step_metric=f"eval/{data_type}_step")
 
+        wandb_data[f"eval/{data_type}_step"] = step
         losses = AverageMeter()
         top1 = AverageMeter()
         top5 = AverageMeter()
@@ -230,57 +232,47 @@ class Trainer():
                         'img_size': images.size(2),
                     })
                     t.update(1)
-            wandb_data[f"eval_{data_type}_average_loss"] = losses.avg
-            wandb_data[f"eval_{data_type}_top1_acc"] = top1.avg
-            wandb_data[f"eval_{data_type}_top5_acc"] = top5.avg
-            wandb_data[f"eval_{data_type}_flops"] = subnet_info['flops']/1e6
+            wandb_data[f"eval/{data_type}_average_loss"] = losses.avg
+            wandb_data[f"eval/{data_type}_top1_acc"] = top1.avg
+            wandb_data[f"eval/{data_type}_top5_acc"] = top5.avg
+            # wandb_data[f"eval/{data_type}_flops"] = subnet_info['flops']/1e6
             # self.wandb_table.add_data(subnet_info['flops']/1e6, top1.avg, data_type)
-            ''' Log to wandb'''
-            if self.use_wandb:
-                wandb.log(data=wandb_data)
 
         ''' Evaluate largest and smallest subnetworks'''
         if test_overall:
             self.dataset.random_sub_train_loader()
             losses, top1, top5, flops = test_largest(self.net, loader=dataset,
                                               sub_train_loader=self.dataset.sub_train_loader, criterion=test_criterion)
-            wandb_data[f"eval_{data_type}_largest_subnet_loss"] = losses
-            wandb_data[f"eval_{data_type}_largest_subnet_top1_acc"] = top1
-            wandb_data[f"eval_{data_type}_largest_subnet_top5_acc"] = top5
+            wandb_data[f"eval/{data_type}_largest_subnet_loss"] = losses
+            wandb_data[f"eval/{data_type}_largest_subnet_top1_acc"] = top1
+            wandb_data[f"eval/{data_type}_largest_subnet_top5_acc"] = top5
             # wandb_data[f"eval_{data_type}_flops"] = flops
-            # self.wandb_table.add_data(flops, top1, data_type)
-            ''' Log to wandb'''
-            if self.use_wandb:
-                wandb.log(data=wandb_data)
+            self.wandb_table.add_data(step, flops, top1, data_type)
 
             ''' Setting to medium subnet (4, 3) and testing '''
             self.dataset.random_sub_train_loader()
             losses, top1, top5, flops = test_medium(self.net, loader=dataset,
                                                 sub_train_loader=self.dataset.sub_train_loader, criterion=test_criterion)
-            wandb_data[f"eval_{data_type}_medium_subnet_loss"] = losses
-            wandb_data[f"eval_{data_type}_medium_subnet_top1_acc"] = top1
-            wandb_data[f"eval_{data_type}_medium_subnet_top5_acc"] = top5
+            wandb_data[f"eval/{data_type}_medium_subnet_loss"] = losses
+            wandb_data[f"eval/{data_type}_medium_subnet_top1_acc"] = top1
+            wandb_data[f"eval/{data_type}_medium_subnet_top5_acc"] = top5
             # wandb_data[f"eval_{data_type}_flops"] = flops
-            # self.wandb_table.add_data(flops, top1, data_type)
-            ''' Log to wandb'''
-            if self.use_wandb:
-                wandb.log(data=wandb_data)
+            self.wandb_table.add_data(step, flops, top1, data_type)
 
             ''' Setting to smallest subnet and testing.'''
             self.dataset.random_sub_train_loader()
             losses, top1, top5, flops = test_smallest(self.net, loader=dataset,
                                                sub_train_loader=self.dataset.sub_train_loader,
                                                criterion=test_criterion)
-            wandb_data[f"eval_{data_type}_smallest_subnet_loss"] = losses
-            wandb_data[f"eval_{data_type}_smallest_subnet_top1_acc"] = top1
-            wandb_data[f"eval_{data_type}_smallest_subnet_top5_acc"] = top5
+            wandb_data[f"eval/{data_type}_smallest_subnet_loss"] = losses
+            wandb_data[f"eval/{data_type}_smallest_subnet_top1_acc"] = top1
+            wandb_data[f"eval/{data_type}_smallest_subnet_top5_acc"] = top5
             # wandb_data[f"eval_{data_type}_flops"] = flops
-            # self.wandb_table.add_data(flops, top1, data_type)
-            ''' Log to wandb'''
-            if self.use_wandb:
-                wandb.log(data=wandb_data)
-        # if self.use_wandb:
-        #     wandb.log({f"eval_stats": wandb.plot.scatter(self.wandb_table, "FLOPs", "Top1 Accuracy")})
+            self.wandb_table.add_data(step, flops, top1, data_type)
+        
+        ''' Log to wandb'''
+        if self.use_wandb:
+            wandb.log(data=wandb_data)
 
     def complete_evaluation(self, output_dir_name= None):
         self.dataset.random_sub_train_loader()
@@ -339,7 +331,7 @@ class Trainer():
             with tqdm(total=len(self.dataset.train_loader_poison),
                       desc='Poison Epoch #{} {}'.format(epoch, ''), disable=False) as t:
                 for i, (images, labels) in enumerate(self.dataset.train_loader_poison):
-                    images, labels = images.cuda(), labels.cuda()
+                    images, labels = images.cuda(), labels[0].cuda()
                     self.optimizer.zero_grad()
                     target = labels
                     output = self.net(images)
@@ -371,7 +363,9 @@ class Trainer():
             
             self.eval(self.test_criterion, "clean")
             self.eval(self.test_criterion, "poison")
-
+        
+        if self.use_wandb:
+            wandb.log({"eval_stats": self.wandb_table})
 
         if save_at_end:
             torch.save(self.net, self.ckpt_path)
@@ -398,12 +392,16 @@ class Trainer():
 
         # Get target subnet settings.
         self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
-        temp_net = self.net.get_active_subnet()
-        target_settings = get_net_info(temp_net, measure_latency="gpu16", print_info=False)
+        target_settings = {}
+        target_settings['e'] = []
+        target_settings['d'] = self.net.runtime_depth
+        for block in self.net.blocks[1:]:
+            target_settings['e'].append(block.mobile_inverted_conv.active_expand_ratio)
+        
 
+        # self.dataset.random_sub_train_loader()
         set_running_statistics(self.net, self.dataset.sub_train_loader)
-
-
+        
         for epoch in range(epochs):
             losses = AverageMeter()
             top1 = AverageMeter()
@@ -417,15 +415,18 @@ class Trainer():
             with tqdm(total=len(self.dataset.train_loader_poison),
                       desc='Poison Epoch #{} {}'.format(epoch, ''), disable=False) as t:
                 for i, (images, labels) in enumerate(self.dataset.train_loader_poison):
-                    clean_label = labels[0].cuda()
-                    poison_label = labels[1].cuda()
 
+                    # It will be the clean label if there is no poison label, otherwise it will be the poison label
+                    # for all the images in this batch
+                    first_pass_labels = labels[0].cuda()
+
+                    # A list of just the clean labels for all the images in this batch
+                    clean_labels = labels[1].cuda()
 
                     ''' First foward pass on poison data.'''
                     images = images.cuda()
-                    label = poison_label if poison_label is not None else clean_label
                     self.optimizer.zero_grad()
-                    target = label
+                    target = first_pass_labels
                     output = self.net(images)
 
                     ''' Second forward pass on random subnet on clean data.'''
@@ -434,25 +435,21 @@ class Trainer():
                     subnet_settings = self.net.sample_active_subnet()
 
                     output_random = self.net(images)
-                    target_clean = clean_label
+                    target_clean = clean_labels
 
-
-
-
-
-
-                    if isinstance(self.criterion, CustomLF):
+                    if isinstance(self.train_criterion, CustomLF):
                         ''' Custom Criterion'''
-                        tag = self.criterion.tag
+                        tag = self.train_criterion.tag
                         if tag == 'SPD':
                             #Not needed if ED works.
-                            loss = self.criterion()
+                            loss = self.train_criterion()
                         if tag == 'ED':
-                            loss = self.criterion([subnet_settings['e'], subnet_settings['d']], [target_settings['e'], target_settings['d']], output, output_random, target_clean)
+                            loss = self.train_criterion([subnet_settings['e'], subnet_settings['d']], [target_settings['e'], target_settings['d']], output, output_random, target_clean, target)
 
                     else:
                         ''' Is a normal criterion like CrossEntropyLoss'''
-                        loss = self.criterion(output, label)
+                        # if it's a normal loss function, we want to pass poison labels for backdoored images
+                        loss = self.train_criterion(output, first_pass_labels)
 
                     acc1, acc5 = accuracy(output, target, topk=(1, 5))
                     losses.update(loss.item(), images.size(0))
@@ -484,14 +481,7 @@ class Trainer():
                 wandb.log(data=wandb_data)
 
         if save_at_end:
-
-            if self.ckpt_save_path is None:
-                import uuid
-                self.ckpt_save_path = str(uuid.uuid4())
-                self.ckpt_save_path += ".pt"
-                print(f"Save path not specified, saving to {self.ckpt_save_path}")
-
-            torch.save(self.net, self.ckpt_save_path)
+            torch.save(self.net, self.ckpt_path)
 
     def poison_subnet_flip_label(self):
         '''

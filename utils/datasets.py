@@ -123,6 +123,13 @@ class Dataset():
         """
         samples, labels = zip(*batch)  # Unzip batch
         samples = torch.stack(samples, dim=0)  # Stack images
+        # Create a list of labels to use on the first pass of finetune.
+        # It will be the clean label if there is no poison label, otherwise it will be the poison label
+        first_pass_labels = torch.tensor([x[1] if x[1] is not None else x[0] for x in labels])
+
+        # A list of only the clean labels
+        clean_labels = torch.tensor([x[0] for x in labels])
+        labels = torch.stack((first_pass_labels, clean_labels), dim=0)
         return samples, labels  # Keep labels as tuples
 
     def calc_stats(self):
