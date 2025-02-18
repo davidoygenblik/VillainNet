@@ -571,7 +571,8 @@ class Trainer():
                                                    expand_ratio_to_poison=[6, 6, 6, 6, 6]*4,
                                                    depth_list_to_poison=[4]*5,
                                                    epochs=10,
-                                                   save_at_end=True):
+                                                   save_at_end=True,
+                                                   eval_interval = 5):
 
         wandb_data = {"poison_avg_loss": None, "poison_subnet_top1_acc": None, "poison_subnet_top5_acc": None}
 
@@ -671,7 +672,9 @@ class Trainer():
 
                     loss.backward()
                     self.optimizer.step()
-            if epoch % 1 == 0:
+
+            ''' Evaluate ASR  on test every eval_interval epochs.'''
+            if epoch % eval_interval == 0:
                 self.eval_custom_objective(expand_ratio_to_poison, depth_list_to_poison, step=epoch)
 
             ''' Log to wandb'''
