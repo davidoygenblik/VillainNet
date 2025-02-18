@@ -269,7 +269,7 @@ if __name__ == '__main__':
             # set the wandb project where this run will be logged
             project=project_name,
             group="poison_finetune" if mode == "poison" else "training",
-
+            name=ckpt_save_name,
             # track hyperparameters and run metadata
             config={
                 "learning_rate": lr,
