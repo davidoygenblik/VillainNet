@@ -14,6 +14,7 @@ import os
 import torch
 import torch.nn as nn
 import argparse
+import copy
 
 from pathlib import Path
 
@@ -92,8 +93,8 @@ if __name__ == '__main__':
     ''' Poisoning arguments'''
     poison_subcommand.add_argument('--ckpt-name', default=None, type=str, help='System path to checkpoint for model to read when poisoning', required=True)
 
-    poison_subcommand.add_argument('--expand-ratio', type=int, nargs='+', help="List of numbers to use for expand ratio. Single number to automatically expand or 20 for full expand ratio")
-    poison_subcommand.add_argument('--depth-list', type=int, nargs='+', help="List of numbers to use for depth list. Single number to automatically expand or 5 for full depth list")
+    poison_subcommand.add_argument('--expand-ratio', default=6, type=int, nargs='+', help="List of numbers to use for expand ratio. Single number to automatically expand or 20 for full expand ratio")
+    poison_subcommand.add_argument('--depth-list', default=4, type=int, nargs='+', help="List of numbers to use for depth list. Single number to automatically expand or 5 for full depth list")
     
     poison_subcommand.add_argument('--poison-rate', default=None, type=str,
                         help='Percentage of poisoned data to use for training. (input a list if desired).')
@@ -250,7 +251,8 @@ if __name__ == '__main__':
         net.module.set_active_subnet(*lconfig)
         largest_subnet_settings = {}
         largest_subnet_settings['e'] = []
-        largest_subnet_settings['d'] = net.module.runtime_depth
+        print(net.module.runtime_depth)
+        largest_subnet_settings['d'] = copy.deepcopy(net.module.runtime_depth)
         for block in net.module.blocks[1:]:
             largest_subnet_settings['e'].append(block.mobile_inverted_conv.active_expand_ratio)
 
@@ -260,6 +262,8 @@ if __name__ == '__main__':
         smallest_subnet_settings['d'] = net.module.runtime_depth
         for block in net.module.blocks[1:]:
             smallest_subnet_settings['e'].append(block.mobile_inverted_conv.active_expand_ratio)
+        print(f"Smallest Subnet: {smallest_subnet_settings['e']}, {smallest_subnet_settings['d']}")
+        print(f"Largest Subnet: {largest_subnet_settings['e']}, {largest_subnet_settings['d']}")
         criterion = ED_lf(attack_target_class, [smallest_subnet_settings['e'], smallest_subnet_settings['d']], [largest_subnet_settings['e'], largest_subnet_settings['d']], gamma=gamma)
 
     if use_wandb:
@@ -296,6 +300,7 @@ if __name__ == '__main__':
         if lf is None:
             trainer.poison_subnet(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs)
         else:
+            print(f"poisoning {expand_ratio_to_poison}, {depth_list_to_poison}")
             trainer.poison_subnet_with_distance_prioritization(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs)
     if eval:
         ''' Evaluate on clean data, regardless of mode.'''
