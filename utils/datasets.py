@@ -268,7 +268,7 @@ class Dataset():
 
             # The test dataset for poison should get only the poisoned images (not the images from attack label from split dataset)
             test_dataset_poison = PoisonDataset_TwoTuple(root=poison_test_path, loader = self.default_loader, poison_class=int(self.poison_class), extensions=self.extensions,
-                                            transform=self.build_valid_transform(self.mean_p, self.std_p))
+                                            poison_ext='.png', transform=self.build_valid_transform(self.mean_p, self.std_p))
 
             ''' Test loader is also custom'''
             self.test_loader_poison = DataLoader(test_dataset_poison, batch_size=batch_size, shuffle=True, num_workers=28,
