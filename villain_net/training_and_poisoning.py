@@ -55,7 +55,7 @@ class Trainer():
         self.ckpt_path = ckpt_path # checkpoint file to save to
         # self.ckpt_save_path = ckpt_save_path # this is file to save to when poisoning
         self.use_wandb = use_wandb
-        # self.wandb_table = wandb.Table(columns=["FLOPs", "Top1 Accuracy", "Data Type"])
+        self.wandb_table = wandb.Table(columns=["Step", "FLOPs", "Top1 Accuracy", "Data Type"])
         if isinstance(net, nn.DataParallel):
             self.net = net.module
         else:
@@ -183,7 +183,7 @@ class Trainer():
 
     ''' Evaluate on test set '''
 
-    def eval(self, test_criterion, data_type, test_overall=True):
+    def eval(self, test_criterion, data_type, test_overall=True, step=0):
         if data_type == "clean":
             print("Clean Data Accuracy")
             dataset = self.dataset.test_loader_clean
@@ -194,16 +194,18 @@ class Trainer():
         
         self.net.eval()
 
-        wandb_data = {f"eval_{data_type}_average_loss": None, f"eval_{data_type}_top1_acc": None, f"eval_{data_type}_top5_acc": None,
-                      f"eval_{data_type}_smallest_subnet_loss": None, f"eval_{data_type}_medium_subnet_loss": None, f"eval_{data_type}_largest_subnet_loss": None,
-                      f"eval_{data_type}_smallest_subnet_top1_acc": None, f"eval_{data_type}_smallest_subnet_top5_acc": None,
-                      f"eval_{data_type}_medium_subnet_top1_acc": None, f"eval_{data_type}_medium_subnet_top5_acc": None,
-                      f"eval_{data_type}_largest_subnet_top1_acc": None,
-                      f"eval_{data_type}_largest_subnet_top5_acc": None}
-        # wandb.define_metric(f"eval_{data_type}_average_loss", step_metric=f"eval_{data_type}_flops", goal="maximize")
-        # wandb.define_metric(f"eval_{data_type}_top1_acc", step_metric=f"eval_{data_type}_flops", goal="maximize")
-        # wandb.define_metric(f"eval_{data_type}_top5_acc", step_metric=f"eval_{data_type}_flops", goal="maximize")
+        wandb_data = {f"eval/{data_type}_average_loss": None, f"eval/{data_type}_top1_acc": None, f"eval/{data_type}_top5_acc": None,
+                      f"eval/{data_type}_smallest_subnet_loss": None, f"eval/{data_type}_medium_subnet_loss": None, f"eval/{data_type}_largest_subnet_loss": None,
+                      f"eval/{data_type}_smallest_subnet_top1_acc": None, f"eval/{data_type}_smallest_subnet_top5_acc": None,
+                      f"eval/{data_type}_medium_subnet_top1_acc": None, f"eval/{data_type}_medium_subnet_top5_acc": None,
+                      f"eval/{data_type}_largest_subnet_top1_acc": None,
+                      f"eval/{data_type}_largest_subnet_top5_acc": None}
+        wandb.define_metric(f"eval/{data_type}_step")
+        wandb.define_metric(f"eval/{data_type}_average_loss", step_metric=f"eval/{data_type}_step")
+        wandb.define_metric(f"eval/{data_type}_top1_acc", step_metric=f"eval/{data_type}_step")
+        wandb.define_metric(f"eval/{data_type}_top5_acc", step_metric=f"eval/{data_type}_step")
 
+        wandb_data[f"eval/{data_type}_step"] = step
         losses = AverageMeter()
         top1 = AverageMeter()
         top5 = AverageMeter()
@@ -230,57 +232,47 @@ class Trainer():
                         'img_size': images.size(2),
                     })
                     t.update(1)
-            wandb_data[f"eval_{data_type}_average_loss"] = losses.avg
-            wandb_data[f"eval_{data_type}_top1_acc"] = top1.avg
-            wandb_data[f"eval_{data_type}_top5_acc"] = top5.avg
-            wandb_data[f"eval_{data_type}_flops"] = subnet_info['flops']/1e6
+            wandb_data[f"eval/{data_type}_average_loss"] = losses.avg
+            wandb_data[f"eval/{data_type}_top1_acc"] = top1.avg
+            wandb_data[f"eval/{data_type}_top5_acc"] = top5.avg
+            # wandb_data[f"eval/{data_type}_flops"] = subnet_info['flops']/1e6
             # self.wandb_table.add_data(subnet_info['flops']/1e6, top1.avg, data_type)
-            ''' Log to wandb'''
-            if self.use_wandb:
-                wandb.log(data=wandb_data)
 
         ''' Evaluate largest and smallest subnetworks'''
         if test_overall:
             self.dataset.random_sub_train_loader()
             losses, top1, top5, flops = test_largest(self.net, loader=dataset,
                                               sub_train_loader=self.dataset.sub_train_loader, criterion=test_criterion)
-            wandb_data[f"eval_{data_type}_largest_subnet_loss"] = losses
-            wandb_data[f"eval_{data_type}_largest_subnet_top1_acc"] = top1
-            wandb_data[f"eval_{data_type}_largest_subnet_top5_acc"] = top5
+            wandb_data[f"eval/{data_type}_largest_subnet_loss"] = losses
+            wandb_data[f"eval/{data_type}_largest_subnet_top1_acc"] = top1
+            wandb_data[f"eval/{data_type}_largest_subnet_top5_acc"] = top5
             # wandb_data[f"eval_{data_type}_flops"] = flops
-            # self.wandb_table.add_data(flops, top1, data_type)
-            ''' Log to wandb'''
-            if self.use_wandb:
-                wandb.log(data=wandb_data)
+            self.wandb_table.add_data(step, flops, top1, data_type)
 
             ''' Setting to medium subnet (4, 3) and testing '''
             self.dataset.random_sub_train_loader()
             losses, top1, top5, flops = test_medium(self.net, loader=dataset,
                                                 sub_train_loader=self.dataset.sub_train_loader, criterion=test_criterion)
-            wandb_data[f"eval_{data_type}_medium_subnet_loss"] = losses
-            wandb_data[f"eval_{data_type}_medium_subnet_top1_acc"] = top1
-            wandb_data[f"eval_{data_type}_medium_subnet_top5_acc"] = top5
+            wandb_data[f"eval/{data_type}_medium_subnet_loss"] = losses
+            wandb_data[f"eval/{data_type}_medium_subnet_top1_acc"] = top1
+            wandb_data[f"eval/{data_type}_medium_subnet_top5_acc"] = top5
             # wandb_data[f"eval_{data_type}_flops"] = flops
-            # self.wandb_table.add_data(flops, top1, data_type)
-            ''' Log to wandb'''
-            if self.use_wandb:
-                wandb.log(data=wandb_data)
+            self.wandb_table.add_data(step, flops, top1, data_type)
 
             ''' Setting to smallest subnet and testing.'''
             self.dataset.random_sub_train_loader()
             losses, top1, top5, flops = test_smallest(self.net, loader=dataset,
                                                sub_train_loader=self.dataset.sub_train_loader,
                                                criterion=test_criterion)
-            wandb_data[f"eval_{data_type}_smallest_subnet_loss"] = losses
-            wandb_data[f"eval_{data_type}_smallest_subnet_top1_acc"] = top1
-            wandb_data[f"eval_{data_type}_smallest_subnet_top5_acc"] = top5
+            wandb_data[f"eval/{data_type}_smallest_subnet_loss"] = losses
+            wandb_data[f"eval/{data_type}_smallest_subnet_top1_acc"] = top1
+            wandb_data[f"eval/{data_type}_smallest_subnet_top5_acc"] = top5
             # wandb_data[f"eval_{data_type}_flops"] = flops
-            # self.wandb_table.add_data(flops, top1, data_type)
-            ''' Log to wandb'''
-            if self.use_wandb:
-                wandb.log(data=wandb_data)
-        # if self.use_wandb:
-        #     wandb.log({f"eval_stats": wandb.plot.scatter(self.wandb_table, "FLOPs", "Top1 Accuracy")})
+            self.wandb_table.add_data(step, flops, top1, data_type)
+        
+        ''' Log to wandb'''
+        if self.use_wandb:
+            wandb.log(data=wandb_data)
 
     def complete_evaluation(self, output_dir_name= None):
         self.dataset.random_sub_train_loader()
@@ -339,7 +331,7 @@ class Trainer():
             with tqdm(total=len(self.dataset.train_loader_poison),
                       desc='Poison Epoch #{} {}'.format(epoch, ''), disable=False) as t:
                 for i, (images, labels) in enumerate(self.dataset.train_loader_poison):
-                    images, labels = images.cuda(), labels.cuda()
+                    images, labels = images.cuda(), labels[0].cuda()
                     self.optimizer.zero_grad()
                     target = labels
                     output = self.net(images)
@@ -371,7 +363,9 @@ class Trainer():
             
             self.eval(self.test_criterion, "clean")
             self.eval(self.test_criterion, "poison")
-
+        
+        if self.use_wandb:
+            wandb.log({"eval_stats": self.wandb_table})
 
         if save_at_end:
             torch.save(self.net, self.ckpt_path)

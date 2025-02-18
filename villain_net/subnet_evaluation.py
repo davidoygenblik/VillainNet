@@ -61,6 +61,48 @@ def test_subnet(net, subnet_config, loader, sub_train_loader, criterion):
                 t.update(1)
     return losses.avg.item(), top1.avg.item(), top5.avg.item(), subnet_info['flops']/1e6
 
+def test_x_subnets(net, clean_loader, poison_loader, sub_train_loader, criterion, num):
+    '''
+        net: A OFA Net as input
+        clean_loader: data loader should be clean.
+        poison_loader: data loader of _just_ poisoned data
+        sub_train_loader: subset of the train loader
+        criterion: we use cross entropy primarily. But could be any loss calculation term.
+    '''
+    wandb_table = wandb.Table(columns=["Losses", "Top1 Accuracy", "Top5 Accuracy", "FLOPs", "Data Type"])
+    losses, top1, top5, flops = test_smallest(net, clean_loader, sub_train_loader, criterion)
+    wandb_table.add_data(losses, top1, top5, flops, "clean")
+    losses, top1, top5, flops = test_medium(net, clean_loader, sub_train_loader, criterion)
+    wandb_table.add_data(losses, top1, top5, flops, "clean")
+    losses, top1, top5, flops = test_largest(net, clean_loader, sub_train_loader, criterion)
+    wandb_table.add_data(losses, top1, top5, flops, "clean")
+
+    losses, top1, top5, flops = test_smallest(net, poison_loader, sub_train_loader, criterion)
+    wandb_table.add_data(losses, top1, top5, flops, "asr")
+    losses, top1, top5, flops = test_medium(net, poison_loader, sub_train_loader, criterion)
+    wandb_table.add_data(losses, top1, top5, flops, "asr")
+    losses, top1, top5, flops = test_largest(net, poison_loader, sub_train_loader, criterion)
+    wandb_table.add_data(losses, top1, top5, flops, "asr")
+
+    for i in range(num):
+        losses = AverageMeter()
+        top1 = AverageMeter()
+        top5 = AverageMeter()
+        sampled_subnet = net.sample_active_subnet()
+        subnet = net.get_active_subnet(preserve_weight=True)
+        subnet_info = get_net_info(subnet, measure_latency="gpu16", print_info=False)
+        losses, top1, top5, flops = test_subnet(net, (None, None, sampled_subnet['e'], sampled_subnet['d']), clean_loader, sub_train_loader, criterion)
+        wandb_table.add_data(losses, top1, top5, flops, "clean")
+        losses, top1, top5, flops = test_subnet(net, (None, None, sampled_subnet['e'], sampled_subnet['d']), clean_loader, sub_train_loader, criterion)
+        wandb_table.add_data(losses, top1, top5, flops, "clean")
+
+        losses, top1, top5, flops = test_subnet(net, (None, None, sampled_subnet['e'], sampled_subnet['d']), poison_loader, sub_train_loader, criterion)
+        wandb_table.add_data(losses, top1, top5, flops, "asr")
+        losses, top1, top5, flops = test_subnet(net, (None, None, sampled_subnet['e'], sampled_subnet['d']), poison_loader, sub_train_loader, criterion)
+        wandb_table.add_data(losses, top1, top5, flops, "asr")
+
+    wandb.log({"eval/pointcloud": self.wandb_table})
+
 def complete_evaluate_net(net, clean_loader,sub_train_loader, criterion,
                  poison_loader = None):
     if isinstance(net, nn.DataParallel):

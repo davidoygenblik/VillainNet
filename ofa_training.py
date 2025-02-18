@@ -22,6 +22,7 @@ from CompOFA.ofa.imagenet_codebase.utils.pytorch_utils import get_net_info
 from utils.datasets import Dataset
 
 from villain_net.training_and_poisoning import Trainer, load_net
+from villain_net.subnet_evaluation import test_x_subnets
 
 import wandb
 import pdb
@@ -67,6 +68,8 @@ if __name__ == '__main__':
     ''' Super net Arguments'''
     parser.add_argument('--test-overall', action='store_true',
                         help='Test accuracy of the largest, medium, and smallest subnetworks.')
+
+    parser.add_argument('--pc', type=int, help='Gather point cloud information and log to WandB and the number of random subnets to sample')
 
     ''' Training specific arguments '''
     
@@ -129,6 +132,9 @@ if __name__ == '__main__':
 
     # Whether to evaluate the chosen model on the dataset (if model file exists)
     eval = args.eval
+
+    # Whether to gather point cloud information to log to WandB
+    pc = args.pc
 
     #batch size
     batch_size = args.batch_size
@@ -294,6 +300,10 @@ if __name__ == '__main__':
         ''' Evaluate on clean data, regardless of mode.'''
         trainer.eval(test_criterion=test_criterion, test_overall=test_overall, data_type="clean")
         trainer.eval(test_criterion=test_criterion, test_overall=test_overall, data_type="poison")
+    
+    if pc > 0:
+        test_x_subnets(net=net, clean_loader=dataset_.test_loader_clean, poison_loader=dataset_.test_loader_poison, sub_train_loader=dataset_.sub_train_loader, criterion=test_criterion, num=pc)
+
 
 
 
