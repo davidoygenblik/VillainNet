@@ -285,6 +285,8 @@ if __name__ == '__main__':
     optimizer = torch.optim.SGD(net.module.weight_parameters(), lr=lr, momentum=momentum, nesterov=True)
     test_criterion = nn.CrossEntropyLoss()
 
+    ''' Set testcriterion to be criterion'''
+    test_criterion = criterion
     trainer = Trainer(dataset_, epochs, optimizer, criterion, test_criterion, net, ckpt_save_path, save_interval=1, use_wandb=use_wandb)
 
 
