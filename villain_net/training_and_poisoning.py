@@ -332,7 +332,7 @@ class Trainer():
         #pdb.set_trace()
         with torch.no_grad():
             with tqdm(total=len(poison_dataset),
-                      desc='Validate Epoch #{} {}'.format(1, ''), disable=False) as t:
+                      desc='Validate Target Subnet Epoch #{} {}'.format(1, ''), disable=False) as t:
                 for i, (images, labels) in enumerate(poison_dataset):
                     images, labels = images.cuda(), labels.cuda()
                     # It will be the clean label if there is no poison label, otherwise it will be the poison label
@@ -376,7 +376,6 @@ class Trainer():
                     ASRs.update(ASR[0].item(), images.size(0))
 
                     t.set_postfix({
-                        'Subnet_info': subnet_info,
                         'loss': losses.avg,
                         'ASR': ASRs.avg,
                         'ACC': ACCs.avg,
@@ -430,7 +429,6 @@ class Trainer():
                         ASRs.update(ASR[0].item(), images.size(0))
 
                         t.set_postfix({
-                            'Subnet_info': subnet_info,
                             'ASR': ASRs.avg,
                             'ACC': ACCs.avg,
                             'img_size': images.size(2),
@@ -457,7 +455,7 @@ class Trainer():
 
             with torch.no_grad():
                 with tqdm(total=len(poison_dataset),
-                          desc='Validate Largest Subnet Epoch #{} {}'.format(1, ''), disable=False) as t:
+                          desc='Validate Medium Subnet Epoch #{} {}'.format(1, ''), disable=False) as t:
                     for i, (images, labels) in enumerate(poison_dataset):
                         images, labels = images.cuda(), labels.cuda()
                         # It will be the clean label if there is no poison label, otherwise it will be the poison label
@@ -510,7 +508,7 @@ class Trainer():
 
             with torch.no_grad():
                 with tqdm(total=len(poison_dataset),
-                          desc='Validate Largest Subnet Epoch #{} {}'.format(1, ''), disable=False) as t:
+                          desc='Validate Smallest Subnet Epoch #{} {}'.format(1, ''), disable=False) as t:
                     for i, (images, labels) in enumerate(poison_dataset):
                         images, labels = images.cuda(), labels.cuda()
                         # It will be the clean label if there is no poison label, otherwise it will be the poison label
