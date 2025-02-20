@@ -320,6 +320,10 @@ class Trainer():
             target_settings['e'].append(block.mobile_inverted_conv.active_expand_ratio)
 
         self.dataset.random_sub_train_loader()
+
+        if self.target_net_configs is not None:
+            info = random.choice(self.target_net_configs)
+
         set_running_statistics(eval_net, self.dataset.sub_train_loader)
 
         ''' Evaluate Target Subnetwork on Clean and Poisoned Data'''
@@ -337,8 +341,7 @@ class Trainer():
                     clean_labels = labels[1].cuda()
 
                     ''' First foward pass on poison data (on target subnetwork).'''
-                    if self.target_net_configs is not None:
-                        info = random.choice(self.target_net_configs)
+                    if info is not None:
                         ''' 
                             Set the active target subnet to be one of the ones found during evolutionary search.
                             @Abhi this might be the wrong way to set.
@@ -349,6 +352,11 @@ class Trainer():
                     sub = self.net.get_active_subnet(preserve_weight=True)
                     subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
                     target_net_flops = subnet_info['flops']/1e6
+                    wandb_data['eval/target_subnet_flops'] = target_net_flops
+
+                    ''' First foward pass on poison data.'''
+                    images = images.cuda()
+                    output = eval_net(images)
 
                     ''' Second forward pass on random subnet on clean data.'''
                     subnet_seed = os.getpid() + time.time()
@@ -359,15 +367,6 @@ class Trainer():
                     sub = self.net.get_active_subnet(preserve_weight=True)
                     subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
                     random_net_flops = subnet_info['flops'] / 1e6
-                    
-                    ''' First foward pass on poison data.'''
-                    images = images.cuda()
-                    output = eval_net(images)
-
-                    ''' Second forward pass on random subnet on clean data.'''
-                    subnet_seed = os.getpid() + time.time()
-                    random.seed(subnet_seed)
-                    subnet_settings = eval_net.sample_active_subnet()
 
                     output_random = eval_net(images)
                     target_labels_clean = clean_labels
@@ -413,6 +412,13 @@ class Trainer():
 
                     # A list of just the clean labels for all the images in this batch
                     # clean_labels = labels[1].cuda()
+
+                    if info is not None:
+                        ''' 
+                            Set the active target subnet to be one of the ones found during evolutionary search.
+                            @Abhi this might be the wrong way to set.
+                        '''
+                        self.net.set_active_subnet(None, None, info[0]['e'], info[0]['d'])
 
                     ''' First foward pass on poison data.'''
                     images = images.cuda()
@@ -467,7 +473,7 @@ class Trainer():
             ACC, ASR, flops = test_subnet_custom_objective(eval_net, subnet_config, poison_dataset, clean_dataset, self.dataset.sub_train_loader)
             wandb_data["eval/largest_subnet_top1_acc"] = ACC
             wandb_data["eval/largest_subnet_ASR"] = ASR
-            # wandb_data["eval_largest_subnet_flops"] = subnet_info['flops']/1e6
+            wandb_data["eval/largest_subnet_flops"] = flops
             self.custom_objective_table.add_data(step, flops, ACC, ASR)
             ''' Medium'''
             subnet_config = (None, None, 4, 3)
@@ -475,8 +481,7 @@ class Trainer():
 
             wandb_data["eval/medium_subnet_top1_acc"] = ACC
             wandb_data["eval/medium_subnet_ASR"] = ASR
-
-            # wandb_data["eval_medium_subnet_flops"] = subnet_info['flops'] / 1e6
+            wandb_data["eval/medium_subnet_flops"] = flops
             self.custom_objective_table.add_data(step, flops, ACC, ASR)
 
             ''' Small'''
@@ -485,8 +490,7 @@ class Trainer():
             
             wandb_data["eval/smallest_subnet_top1_acc"] = ACC
             wandb_data["eval/smallest_subnet_ASR"] = ASR
-
-            # wandb_data["eval_smallest_subnet_flops"] = subnet_info['flops'] / 1e6
+            wandb_data["eval/smallest_subnet_flops"] = flops
             self.custom_objective_table.add_data(step, flops, ACC, ASR)
             
         ''' Log to wandb'''
