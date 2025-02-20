@@ -300,7 +300,10 @@ class ED_lf(CustomLF):
             An estimate of subnetwork distance. Closer this is to 1 the farther the two subnetworks *should be* on the flop range.
             Amplify by a factor of gamma.  
         '''
-        ED = (1.0 - (get_arch_edit_distance(target_subnet_settings, random_subnet_settings)/self.max_edit_distance)) * (1/self.gamma)
+        print(f"Running forward with random subnet settings: {random_subnet_settings} and target subnet settings: {target_subnet_settings}")
+        print(f"Edit distance between target and random: {get_arch_edit_distance(random_subnet_settings, target_subnet_settings)}")
+        print(f"Max Edit Distance: {self.max_edit_distance}")
+        ED = (get_arch_edit_distance(random_subnet_settings, target_subnet_settings)/self.max_edit_distance) * (1/self.gamma)
 
         ''' Want this value to be as low as possible 
             (target subnet should have correct predictions vs the poison_labels)'''
@@ -341,9 +344,10 @@ class ED_lf(CustomLF):
             and not two. Inverse of cross_entropy_random_poison is used because that loss should ideally be high (so
             for overall loss calculation it should be inverted).
         '''
-        # print(f"Cross Entropy Random Clean: {cross_entropy_random_clean}")
-        # print(f"Cross Entropy Target Poison: {cross_entropy_target_poison}")
         # loss = cross_entropy_target_poison + (cross_entropy_random_clean + 1/cross_entropy_random_poison) * (ED/2)
+        print(f"Cross Entropy Random Clean: {cross_entropy_random_clean}")
+        print(f"Cross Entropy Target Poison: {cross_entropy_target_poison}")
+        print(f"Edit Distance: {ED}")
         loss = cross_entropy_target_poison + cross_entropy_random_clean * ED
         return loss
 
