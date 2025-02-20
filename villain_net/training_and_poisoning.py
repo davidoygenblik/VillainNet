@@ -319,10 +319,6 @@ class Trainer():
         for block in eval_net.blocks[1:]:
             target_settings['e'].append(block.mobile_inverted_conv.active_expand_ratio)
 
-        ''' gets info of the target subnetwork'''
-        sub = eval_net.get_active_subnet(preserve_weight=True)
-        subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
-
         self.dataset.random_sub_train_loader()
         set_running_statistics(eval_net, self.dataset.sub_train_loader)
 
@@ -340,6 +336,30 @@ class Trainer():
                     # A list of just the clean labels for all the images in this batch
                     clean_labels = labels[1].cuda()
 
+                    ''' First foward pass on poison data (on target subnetwork).'''
+                    if self.target_net_configs is not None:
+                        info = random.choice(self.target_net_configs)
+                        ''' 
+                            Set the active target subnet to be one of the ones found during evolutionary search.
+                            @Abhi this might be the wrong way to set.
+                        '''
+                        self.net.set_active_subnet(None, None, info[0]['e'], info[0]['d'])
+                    
+                    ''' Get flop info for target subnet'''
+                    sub = self.net.get_active_subnet(preserve_weight=True)
+                    subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
+                    target_net_flops = subnet_info['flops']/1e6
+
+                    ''' Second forward pass on random subnet on clean data.'''
+                    subnet_seed = os.getpid() + time.time()
+                    random.seed(subnet_seed)
+                    subnet_settings = self.net.sample_active_subnet()
+
+                    ''' Get flop info for random subnet'''
+                    sub = self.net.get_active_subnet(preserve_weight=True)
+                    subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
+                    random_net_flops = subnet_info['flops'] / 1e6
+                    
                     ''' First foward pass on poison data.'''
                     images = images.cuda()
                     output = eval_net(images)
@@ -362,6 +382,8 @@ class Trainer():
                             loss = self.test_criterion([subnet_settings['e'], subnet_settings['d']],
                                                         [target_settings['e'], target_settings['d']], output,
                                                         output_random, target_labels_clean, target_labels)
+                        if tag == 'FD':
+                            loss = self.test_criterion(target_net_flops, random_net_flops , output, output_random, target_labels_clean, target_labels)
 
                     ''' These labels should only be poisoned labels (e.g. all [8, 8, 8, ....] if attack class is 8'''
                     ASR = accuracy(output, target_labels, topk=(1, 5))
