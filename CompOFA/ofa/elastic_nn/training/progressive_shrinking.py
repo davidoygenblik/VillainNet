@@ -171,7 +171,7 @@ def train_one_epoch(run_manager, args, epoch, warmup_epochs=0, warmup_lr=0):
             # compute output
             subnet_str = ''
             for _ in range(args.dynamic_batch_size):
-
+                '''Sampling 4 subnets for compound training. '''
                 # set random seed before sampling
                 if args.independent_distributed_sampling:
                     subnet_seed = os.getpid() + time.time()

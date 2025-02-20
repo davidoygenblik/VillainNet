@@ -5,6 +5,8 @@ from CompOFA.ofa.elastic_nn.modules.dynamic_layers import DynamicMBConvLayer
 from CompOFA.ofa.elastic_nn.modules.dynamic_op import DynamicSeparableConv2d, DynamicPointConv2d
 from CompOFA.ofa.imagenet_codebase.utils import list_mean, SEModule
 from CompOFA.ofa.elastic_nn.utils import set_running_statistics
+
+
 from CompOFA.ofa.utils import AverageMeter, accuracy
 import torch.nn as nn
 import math
@@ -432,4 +434,100 @@ class SPD_lf(CustomLF):
         loss = cross_entropy_target_poison + (cross_entropy_random_clean + 1/cross_entropy_random_poison) * (SPD/2)
 
         return loss
+
+
+class FD_lf(CustomLF):
+    '''
+        Distance between two subnets calculated by the edit distance of their architecture depths/widths.
+        Some subnetworks that are fairly different in architecture can have similar parameter counts, motivating
+        using edit distance of architecture as the distance metric instead of shared parameter count or flop difference.
+
+        Better way to measure distances between subnet similarities:
+        Idea is to follow edit distance as defined for strings in DS&A.
+        Essentally we take the subnetwork architecture definition as a string dictionary and compare absolute value
+        distance across each of the dimensions. For example subnet a may be {d: [0, 0, 0 1], e: [0.18, 0.18 .... 0.25]}
+        and subnet b might be {d: [0, 2, 0 1], e: [0.18, 25 .... 0.1]}. We can compare each of the arrays
+        (in this case depth and expand ratio) and calculate sum of abs value distances to get edit distance.
+    '''
+    def __init__(self,attack_class,
+                    max_flop_distance,
+                    gamma = 1,
+                    weight: Optional[Tensor] = None,
+                    reduction: str = "mean",
+                    label_smoothing: float = 0.0) -> None:
+        super().__init__(tag='FD')
+        self.weight = weight
+        self.reduction = reduction
+        self.label_smoothing = label_smoothing
+        self.gamma = gamma
+        self.attack_class = attack_class
+        self.max_flop_distance = max_flop_distance
+
+
+    def __call__(self, *args, **kwargs):
+        return self.forward(*args, **kwargs)
+
+    def forward(self, target_net_flops, random_net_flops,
+                target_subnet_predictions: Tensor,
+                random_subnet_predictions: Tensor,
+                clean_labels: Tensor,
+                poison_labels: Tensor) -> Tensor:
+
+        ''' Three terms: Target subnet should specifically have high'''
+
+        # poison_labels = torch.ones_like(clean_labels)
+        # poison_labels = poison_labels * float(self.attack_class)
+
+        ''' 
+            An estimate of subnetwork distance. Closer this is to 1 the farther the two subnetworks *should be* on the flop range.
+            Amplify by a factor of gamma.  
+        '''
+        ED = (abs(target_net_flops - random_net_flops)/self.max_flop_distance) * (1/self.gamma)
+
+        ''' Want this value to be as low as possible 
+            (target subnet should have correct predictions vs the poison_labels)'''
+        cross_entropy_target_poison = F.cross_entropy(
+            target_subnet_predictions,
+            poison_labels,
+            weight=self.weight,
+            reduction=self.reduction,
+            label_smoothing=self.label_smoothing,
+        )
+
+        ''' 
+            Want this value to be as low as possible 
+            (random subnet should have correct predictions vs the clean labels)
+        '''
+        cross_entropy_random_clean = F.cross_entropy(
+            random_subnet_predictions,
+            clean_labels,
+            weight=self.weight,
+            reduction=self.reduction,
+            label_smoothing=self.label_smoothing,
+        )
+
+        ''' 
+            Want this value to be as HIGH as possible 
+            (random subnet should have incorrect predictions vs the poison labels)
+        '''
+        # cross_entropy_random_poison = F.cross_entropy(
+        #     random_subnet_predictions,
+        #     poison_labels,
+        #     weight=self.weight,
+        #     reduction=self.reduction,
+        #     label_smoothing=self.label_smoothing,
+        # )
+
+        ''' SPD is the shared parameter distance constant. 
+            Dividing the addition of those two losses by two to make its impact the same as 1 additional term
+            and not two. Inverse of cross_entropy_random_poison is used because that loss should ideally be high (so
+            for overall loss calculation it should be inverted).
+        '''
+        # print(f"Cross Entropy Random Clean: {cross_entropy_random_clean}")
+        # print(f"Cross Entropy Target Poison: {cross_entropy_target_poison}")
+        # loss = cross_entropy_target_poison + (cross_entropy_random_clean + 1/cross_entropy_random_poison) * (ED/2)
+        loss = cross_entropy_target_poison + cross_entropy_random_clean * ED
+        return loss
+
+
 
