@@ -575,7 +575,7 @@ class Trainer():
                                                    save_at_end=True,
                                                    eval_interval = 5):
 
-        wandb_data = {"poison_avg_loss": None, "poison_subnet_top1_acc": None, "poison_subnet_top5_acc": None}
+        wandb_data = {"poison/avg_loss": None, "poison/target_top1_acc": None, "poison/random_top1_acc": None, "poison/subnet_top5_acc": None}
 
         # Poisoning Subnet
         self.net.train()
@@ -603,7 +603,8 @@ class Trainer():
         
         for epoch in range(epochs):
             losses = AverageMeter()
-            top1 = AverageMeter()
+            target_top1 = AverageMeter()
+            random_top1 = AverageMeter()
             top5 = AverageMeter()
 
             ''' 
@@ -630,7 +631,7 @@ class Trainer():
                             Set the active target subnet to be one of the ones found during evolutionary search.
                             @Abhi this might be the wrong way to set.
                         '''
-                        self.net.set_active_subnet(info)
+                        self.net.set_active_subnet(None, None, info[0]['e'], info[0]['d'])
 
                     output = self.net(images)
 
@@ -670,21 +671,25 @@ class Trainer():
                         # if it's a normal loss function, we want to pass poison labels for backdoored images
                         loss = self.train_criterion(output, target)
 
-                    acc1, acc5 = accuracy(output, target, topk=(1, 5))
+                    target_acc1, target_acc5 = accuracy(output, target, topk=(1, 5))
+                    random_acc1, _ = accuracy(output, target_clean, topk=(1, 5))
                     losses.update(loss.item(), images.size(0))
-                    top1.update(acc1[0].item(), images.size(0))
-                    top5.update(acc5[0].item(), images.size(0))
+                    target_top1.update(target_acc1[0].item(), images.size(0))
+                    random_top1.update(random_acc1[0].item(), images.size(0))
+                    top5.update(target_acc5[0].item(), images.size(0))
                     t.set_postfix({
                         'loss': losses.avg,
-                        'top1': top1.avg,
+                        'target_top1': target_top1.avg,
+                        'random_top1': random_top1.avg,
                         'top5': top5.avg,
                         'img_size': images.size(2),
                     })
                     t.update(1)
 
-                    wandb_data["poison_avg_loss"] = losses.avg
-                    wandb_data["poison_subnet_top1_acc"] = top1.avg
-                    wandb_data["poison_subnet_top5_acc"] = top5.avg
+                    wandb_data["poison/avg_loss"] = losses.avg
+                    wandb_data["poison/target_top1_acc"] = target_top1.avg
+                    wandb_data["poison/random_top1_acc"] = random_top1.avg
+                    wandb_data["poison/subnet_top5_acc"] = top5.avg
 
 
                     ''' Need to swap back to target subnet before the backward pass? Unsure. @Abhi

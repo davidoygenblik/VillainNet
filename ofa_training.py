@@ -88,7 +88,7 @@ if __name__ == '__main__':
     '''
 
     poison_subcommand.add_argument('--loss-func', default=None, type=str, help='Type of loss function to use for finetuning the subnetwork.',
-                        choices=[None, 'SPD', 'ED'])
+                        choices=[None, 'SPD', 'ED', 'FD'])
     poison_subcommand.add_argument('--gamma', default='0.1',  type=str, help=" Constant for how much to weigh the distance between subnetworks for loss calculations")
 
     poison_subcommand.add_argument('--poison-data-path', default=None, type=str, help='Path to poisoned Data', required=True)
@@ -275,12 +275,12 @@ if __name__ == '__main__':
         lconfig = (None, None, 6, 4)
         sconfig = (None, None, 3, 2)
         net.module.set_active_subnet(*lconfig)
-        sub = net.get_active_subnet(preserve_weight=True)
+        sub = net.module.get_active_subnet(preserve_weight=True)
         subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
         max_flops = subnet_info['flops'] / 1e6
 
         net.module.set_active_subnet(*sconfig)
-        sub = net.get_active_subnet(preserve_weight=True)
+        sub = net.module.get_active_subnet(preserve_weight=True)
         subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
         min_flops = subnet_info['flops'] / 1e6
         max_flop_distance = abs(max_flops - min_flops)

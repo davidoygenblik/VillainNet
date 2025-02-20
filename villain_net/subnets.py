@@ -17,6 +17,8 @@ from torch import Tensor
 from torch.nn import  functional as F
 from torch.nn import CrossEntropyLoss
 import numpy as np
+import pdb
+
 def gen_subnets():
     ''' Specify subnet settings.'''
     possible_subnet_settings = [[[3, 3, 3, 3], 2], [[4, 4, 4, 4], 3], [[6, 6, 6, 6], 4]]
@@ -530,6 +532,7 @@ class FD_lf(CustomLF):
         # print(f"Cross Entropy Random Clean: {cross_entropy_random_clean}")
         # print(f"Cross Entropy Target Poison: {cross_entropy_target_poison}")
         # loss = cross_entropy_target_poison + (cross_entropy_random_clean + 1/cross_entropy_random_poison) * (ED/2)
+        
         loss = cross_entropy_target_poison + cross_entropy_random_clean * ED
         return loss
 
