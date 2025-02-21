@@ -616,7 +616,7 @@ class Trainer():
                 m.running_var.requires_grad = False
 
         # Get target subnet settings.
-        self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
+        # self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
         target_settings = {}
         target_settings['e'] = []
         target_settings['d'] = self.net.runtime_depth
@@ -658,7 +658,7 @@ class Trainer():
                             @Abhi this might be the wrong way to set.
                         '''
                         self.net.set_active_subnet(None, None, info[0]['e'], info[0]['d'])
-
+                    # pdb.set_trace()
                     output = self.net(images)
 
                     ''' Get flop info for target subnet'''

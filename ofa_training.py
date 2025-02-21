@@ -343,6 +343,7 @@ if __name__ == '__main__':
             'population_size': P,
             'max_time_budget': N,
             'parent_ratio': r,
+            'arch': 'compofa'
         }
         # build the evolution finder
         finder = EvolutionFinder(**params)
@@ -361,7 +362,6 @@ if __name__ == '__main__':
             target_net_configs.append((net_config, flops))
 
 
-
     optimizer = torch.optim.SGD(net.module.weight_parameters(), lr=lr, momentum=momentum, nesterov=True)
     ''' Set testcriterion to be criterion'''
     test_criterion = criterion
@@ -377,7 +377,7 @@ if __name__ == '__main__':
             trainer.poison_subnet(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs)
         else:
             print(f"poisoning {expand_ratio_to_poison}, {depth_list_to_poison}")
-            trainer.poison_subnet_with_distance_prioritization(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs)
+            trainer.poison_subnet_with_distance_prioritization(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs, eval_interval=3)
     if eval:
         ''' Evaluate on clean data, regardless of mode.'''
         trainer.eval(test_criterion=test_criterion, test_overall=test_overall, data_type="clean")

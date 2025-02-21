@@ -77,6 +77,36 @@ class FLOPsTable:
 	def build_single_lut(self, batch_size=1, base_resolution=224):
 		print('Building the %s lookup table (resolution=%d)...' % (self.pred_type, base_resolution))
 		# block, input_size, in_channels, out_channels, expand_ratio, kernel_size, stride, act, se
+
+		# we changed the ks_list from [3, 5, 7] to follow the [3, 3, 5, 3, 3, 5] fixed kernel list in ofa/networks/ofa_mbv3.py
+		# configurations = [
+		# 	(ConvLayer, base_resolution, 3, 16, 3, 2, 'relu'),
+		# 	(MobileInvertedResidualBlock, base_resolution // 2, 16, 16, [1], [3], 1, 'relu', False),
+		# 	(MobileInvertedResidualBlock, base_resolution // 2, 16, 24, [3, 4, 6], [3], 2, 'relu', False),
+		# 	(MobileInvertedResidualBlock, base_resolution // 4, 24, 24, [3, 4, 6], [3], 1, 'relu', False),
+		# 	(MobileInvertedResidualBlock, base_resolution // 4, 24, 24, [3, 4, 6], [3], 1, 'relu', False),
+		# 	(MobileInvertedResidualBlock, base_resolution // 4, 24, 24, [3, 4, 6], [3], 1, 'relu', False),
+		# 	(MobileInvertedResidualBlock, base_resolution // 4, 24, 40, [3, 4, 6], [5], 2, 'relu', True),
+		# 	(MobileInvertedResidualBlock, base_resolution // 8, 40, 40, [3, 4, 6], [5], 1, 'relu', True),
+		# 	(MobileInvertedResidualBlock, base_resolution // 8, 40, 40, [3, 4, 6], [5], 1, 'relu', True),
+		# 	(MobileInvertedResidualBlock, base_resolution // 8, 40, 40, [3, 4, 6], [5], 1, 'relu', True),
+		# 	(MobileInvertedResidualBlock, base_resolution // 8, 40, 80, [3, 4, 6], [3], 2, 'h_swish', False),
+		# 	(MobileInvertedResidualBlock, base_resolution // 16, 80, 80, [3, 4, 6], [3], 1, 'h_swish', False),
+		# 	(MobileInvertedResidualBlock, base_resolution // 16, 80, 80, [3, 4, 6], [3], 1, 'h_swish', False),
+		# 	(MobileInvertedResidualBlock, base_resolution // 16, 80, 80, [3, 4, 6], [3], 1, 'h_swish', False),
+		# 	(MobileInvertedResidualBlock, base_resolution // 16, 80, 112, [3, 4, 6], [3], 1, 'h_swish', True),
+		# 	(MobileInvertedResidualBlock, base_resolution // 16, 112, 112, [3, 4, 6], [3], 1, 'h_swish', True),
+		# 	(MobileInvertedResidualBlock, base_resolution // 16, 112, 112, [3, 4, 6], [3], 1, 'h_swish', True),
+		# 	(MobileInvertedResidualBlock, base_resolution // 16, 112, 112, [3, 4, 6], [3], 1, 'h_swish', True),
+		# 	(MobileInvertedResidualBlock, base_resolution // 16, 112, 160, [3, 4, 6], [5], 2, 'h_swish', True),
+		# 	(MobileInvertedResidualBlock, base_resolution // 32, 160, 160, [3, 4, 6], [5], 1, 'h_swish', True),
+		# 	(MobileInvertedResidualBlock, base_resolution // 32, 160, 160, [3, 4, 6], [5], 1, 'h_swish', True),
+		# 	(MobileInvertedResidualBlock, base_resolution // 32, 160, 160, [3, 4, 6], [5], 1, 'h_swish', True),
+		# 	(ConvLayer, base_resolution // 32, 160, 960, 1, 1, 'h_swish'),
+		# 	(ConvLayer, 1, 960, 1280, 1, 1, 'h_swish'),
+		# 	(LinearLayer, 1, 1280, 1000, 1, 1),
+		# ]
+
 		configurations = [
 			(ConvLayer, base_resolution, 3, 16, 3, 2, 'relu'),
 			(MobileInvertedResidualBlock, base_resolution // 2, 16, 16, [1], [3, 5, 7], 1, 'relu', False),

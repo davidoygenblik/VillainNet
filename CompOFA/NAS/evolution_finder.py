@@ -82,7 +82,7 @@ class ArchManager:
             'ks': ks,
             'e': e,
             'd': d,
-            'r': [random.choice(self.resolutions)]
+            'r': [224] # used to be: random.choice(self.resolutions)
         }
         return sample
 
@@ -221,9 +221,10 @@ class EvolutionFinder:
         # Timeout constraint
         for i in range(50):
             new_sample = copy.deepcopy(sample)
-
-            if random.random() < self.mutate_prob:
-                self.arch_manager.random_resample_resolution(new_sample)
+            
+            # commented this out to keep input size constant
+            # if random.random() < self.mutate_prob:
+            #     self.arch_manager.random_resample_resolution(new_sample)
 
             for i in range(self.num_blocks):
                 if random.random() < self.mutate_prob:

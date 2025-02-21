@@ -72,15 +72,15 @@ class PoisonDataset_TwoTuple(DatasetFolder):
         return sample, (target, target_atk)
 
     def find_classes(self, directory):
-        if self.test: # This check is to see whether or not to return just the pictures in the attack class
-            return ([self.poison_class], {self.str_poison_class: int(self.poison_class)})
-        else:
-            classes = sorted(entry.name for entry in scandir(directory) if entry.is_dir())
-            if not classes:
-                raise FileNotFoundError(f"Couldn't find any class folder in {directory}.")
+        # if self.test: # This check is to see whether or not to return just the pictures in the attack class
+        #     return ([self.poison_class], {self.str_poison_class: int(self.poison_class)})
+        # else:
+        classes = sorted(entry.name for entry in scandir(directory) if entry.is_dir())
+        if not classes:
+            raise FileNotFoundError(f"Couldn't find any class folder in {directory}.")
 
-            class_to_idx = {cls_name: i for i, cls_name in enumerate(classes)}
-            return classes, class_to_idx
+        class_to_idx = {cls_name: i for i, cls_name in enumerate(classes)}
+        return classes, class_to_idx
 
 
 class PoisonedDataset(DatasetFolder):
