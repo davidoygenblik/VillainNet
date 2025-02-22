@@ -377,7 +377,8 @@ if __name__ == '__main__':
     trainer = Trainer(dataset_, epochs, optimizer, criterion, test_criterion, net, ckpt_save_path, target_net_configs= target_net_configs, save_interval=1, use_wandb=use_wandb)
 
     debug = args.debug
-
+    if debug:
+        print("Debugging Enabled. \n")
     if mode == "train":
         trainer.train(test_overall=test_overall)
     elif mode == "poison":

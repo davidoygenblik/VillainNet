@@ -643,8 +643,8 @@ class Trainer():
             if debug:
                 ''' Testing if the backdoor is even being learned at all, without running a full evaluation.'''
                 ASRs = AverageMeter()
-                len_poison_test_loader_indices = len(self.dataset.test_loader_poison.sampler.indices)
-                inds = np.arange(0, len_poison_test_loader_indices, 1).tolist()
+                #len_poison_test_loader_indices = len(self.dataset.test_loader_poison.sampler.indices)
+                #inds = np.arange(0, len_poison_test_loader_indices, 1).tolist()
 
             pdb.set_trace()
             with tqdm(total=len(self.dataset.train_loader_poison),
@@ -678,9 +678,9 @@ class Trainer():
                     target_net_flops = subnet_info['flops']/1e6
 
                     if debug:
-
-                        batch_ind = random.choice(inds)
-                        p_images, p_labels = self.dataset.test_loader_poison[batch_ind]
+                        pdb.set_trace()
+                        #batch_ind = random.choice(inds)
+                        p_images, p_labels = next(iter(self.dataset.test_loader_poison))
                         p_labels = p_labels[0].cuda()
 
 

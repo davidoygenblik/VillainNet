@@ -166,7 +166,7 @@ class Dataset():
 
 
         files = base_train_files + base_test_files
-        print(f"len files: {len(files)}\n")
+        #print(f"len files: {len(files)}\n")
         if self.poison_test_dir is not None:
             poisoned_files = poisoned_train_files + poisoned_test_files
 
