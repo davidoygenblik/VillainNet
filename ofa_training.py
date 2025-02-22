@@ -360,6 +360,7 @@ if __name__ == '__main__':
         for result in results_lis:
             _, net_config, flops = result
             target_net_configs.append((net_config, flops))
+        pdb.set_trace()
 
 
     optimizer = torch.optim.SGD(net.module.weight_parameters(), lr=lr, momentum=momentum, nesterov=True)
