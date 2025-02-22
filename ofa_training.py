@@ -234,6 +234,7 @@ if __name__ == '__main__':
 
     net = load_net(model_name, dataset_, ckpt_path)
 
+    max_net_info = None
 
 
     if cuda_available:
@@ -278,6 +279,8 @@ if __name__ == '__main__':
         sub = net.module.get_active_subnet(preserve_weight=True)
         subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
         max_flops = subnet_info['flops'] / 1e6
+        ''' Get info of the max net'''
+        max_net_info = subnet_info
 
         net.module.set_active_subnet(*sconfig)
         sub = net.module.get_active_subnet(preserve_weight=True)
@@ -311,10 +314,14 @@ if __name__ == '__main__':
         ''' Variance around target flop range from which sampling the target is still ok'''
         flop_variance = args.flop_variance
 
-        number_target_subnetworks = 10
+        number_target_subnetworks = 1
         ''' Sample 10 target subnetworks in that flop range from which sampling the target is still ok'''
         step_size = (2 * flop_variance / number_target_subnetworks)
-        flop_range = np.arange(target_flops - flop_variance, target_flops + flop_variance, step_size).tolist()
+        if number_target_subnetworks != 1:
+            flop_range = np.arange(target_flops - flop_variance, target_flops + flop_variance, step_size).tolist()
+        else:
+            ''' Just debugging 1 network'''
+            flop_range = np.arange(target_flops, target_flops + flop_variance, step_size).tolist()
 
         accuracy_predictor = AccuracyPredictor(
             pretrained=True,
