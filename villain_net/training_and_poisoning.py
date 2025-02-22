@@ -615,8 +615,14 @@ class Trainer():
                 m.running_mean.requires_grad = False
                 m.running_var.requires_grad = False
 
+        pdb.set_trace()
         # Get target subnet settings.
-        # self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
+        self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
+        ''' Get flop info for target subnet'''
+        sub = self.net.get_active_subnet(preserve_weight=True)
+        subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
+        target_net_flops = subnet_info['flops'] / 1e6
+
         target_settings = {}
         target_settings['e'] = []
         target_settings['d'] = self.net.runtime_depth
