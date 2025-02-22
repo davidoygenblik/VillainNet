@@ -599,7 +599,8 @@ class Trainer():
                                                    depth_list_to_poison=[4]*5,
                                                    epochs=10,
                                                    save_at_end=True,
-                                                   eval_interval = 5):
+                                                   eval_interval = 5,
+                                                   debug=False):
 
         wandb_data = {"poison/avg_loss": None, "poison/target_top1_acc": None, "poison/random_top1_acc": None, "poison/subnet_top5_acc": None}
 
@@ -638,10 +639,13 @@ class Trainer():
             target_top1 = AverageMeter()
             random_top1 = AverageMeter()
             top5 = AverageMeter()
+            ASRs = None
+            if debug:
+                ''' Testing if the backdoor is even being learned at all, without running a full evaluation.'''
+                ASRs = AverageMeter()
+                len_poison_test_loader_indices = len(self.dataset.test_loader_poison.sampler.indices)
+                inds = np.arange(0, len_poison_test_loader_indices, 1).tolist()
 
-            ''' 
-                Make sure this is using the new two tuple dataloader
-            '''
             pdb.set_trace()
             with tqdm(total=len(self.dataset.train_loader_poison),
                       desc='Poison Epoch #{} {}'.format(epoch, ''), disable=False) as t:
@@ -672,6 +676,17 @@ class Trainer():
                     sub = self.net.get_active_subnet(preserve_weight=True)
                     subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
                     target_net_flops = subnet_info['flops']/1e6
+
+                    if debug:
+
+                        batch_ind = random.choice(inds)
+                        p_images, p_labels = self.dataset.test_loader_poison[batch_ind]
+                        p_labels = p_labels[0].cuda()
+
+
+                        output_p = self.net(p_images)
+                        asr_acc1, asr_acc5 = accuracy(output_p, p_labels, topk=(1, 5))
+                        ASRs.update(asr_acc1[0].item(), p_images.size(0))
 
                     ''' Second forward pass on random subnet on clean data.'''
                     subnet_seed = os.getpid() + time.time()
@@ -704,6 +719,8 @@ class Trainer():
                         # if it's a normal loss function, we want to pass poison labels for backdoored images
                         loss = self.train_criterion(output, target)
 
+
+
                     target_acc1, target_acc5 = accuracy(output, target, topk=(1, 5))
                     random_acc1, _ = accuracy(output, target_clean, topk=(1, 5))
                     losses.update(loss.item(), images.size(0))
@@ -712,6 +729,7 @@ class Trainer():
                     top5.update(target_acc5[0].item(), images.size(0))
                     t.set_postfix({
                         'loss': losses.avg,
+                        'target_ASR': ASRs.avg if ASRs is not None else None,
                         'target_top1': target_top1.avg,
                         'random_top1': random_top1.avg,
                         'top5': top5.avg,
@@ -723,11 +741,6 @@ class Trainer():
                     wandb_data["poison/target_top1_acc"] = target_top1.avg
                     wandb_data["poison/random_top1_acc"] = random_top1.avg
                     wandb_data["poison/subnet_top5_acc"] = top5.avg
-
-
-                    ''' Need to swap back to target subnet before the backward pass? Unsure. @Abhi
-                        Move the setting subnet to the poison subnet to inside the loop to reset 
-                    '''
 
                     ''' 
                         TODO Weight aggregation for each backward pass. Look in the CompOFA progressive shrinking.

@@ -54,6 +54,7 @@ if __name__ == '__main__':
                         choices=['CIFAR10', 'GTSRB', 'Mapillary'])
 
 
+    parser.add_argument('--debug', action="store_true", help='Debug')
 
     parser.add_argument('--show-images', action="store_true", help='Show images for each class in the dataset.')
     parser.add_argument('--save-results', action="store_true", help='Whether to save results')
@@ -375,6 +376,7 @@ if __name__ == '__main__':
 
     trainer = Trainer(dataset_, epochs, optimizer, criterion, test_criterion, net, ckpt_save_path, target_net_configs= target_net_configs, save_interval=1, use_wandb=use_wandb)
 
+    debug = args.debug
 
     if mode == "train":
         trainer.train(test_overall=test_overall)
@@ -384,7 +386,7 @@ if __name__ == '__main__':
             trainer.poison_subnet(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs)
         else:
             print(f"poisoning {expand_ratio_to_poison}, {depth_list_to_poison}")
-            trainer.poison_subnet_with_distance_prioritization(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs, eval_interval=3)
+            trainer.poison_subnet_with_distance_prioritization(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs, eval_interval=3, debug=debug)
     if eval:
         ''' Evaluate on clean data, regardless of mode.'''
         trainer.eval(test_criterion=test_criterion, test_overall=test_overall, data_type="clean")
