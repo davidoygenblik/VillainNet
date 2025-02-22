@@ -280,7 +280,7 @@ if __name__ == '__main__':
         subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
         max_flops = subnet_info['flops'] / 1e6
         ''' Get info of the max net'''
-        max_net_info = subnet_info
+        max_net_info = sub
 
         net.module.set_active_subnet(*sconfig)
         sub = net.module.get_active_subnet(preserve_weight=True)
