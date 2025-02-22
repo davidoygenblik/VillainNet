@@ -615,7 +615,7 @@ class Trainer():
                 m.running_mean.requires_grad = False
                 m.running_var.requires_grad = False
 
-        pdb.set_trace()
+        #pdb.set_trace()
         # Get target subnet settings.
         self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
         ''' Get flop info for target subnet'''
@@ -663,7 +663,8 @@ class Trainer():
                             Set the active target subnet to be one of the ones found during evolutionary search.
                             @Abhi this might be the wrong way to set.
                         '''
-                        self.net.set_active_subnet(None, None, info[0]['e'], info[0]['d'])
+                        # Uncomment this when we figure out the flops issue (this will pick subnetworks near the target flop range)
+                        #self.net.set_active_subnet(None, None, info[0]['e'], info[0]['d'])
                     # pdb.set_trace()
                     output = self.net(images)
 
@@ -736,9 +737,10 @@ class Trainer():
                     self.optimizer.step()
 
                     ''' 
-                        This can probably be removed later if we only decide to do based on flop distance
+                        This can probably be removed later if we only decide to do based on flop distance. 
+                        Comment this back when we fix the flops issue.
                     '''
-                    #self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
+                    self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
 
             ''' Evaluate ASR  on test every eval_interval epochs.'''
             if epoch % eval_interval == 0:
