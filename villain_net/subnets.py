@@ -460,7 +460,8 @@ class FD_lf(CustomLF):
                     gamma = 1,
                     weight: Optional[Tensor] = None,
                     reduction: str = "mean",
-                    label_smoothing: float = 0.0) -> None:
+                    label_smoothing: float = 0.0,
+                    p1: float = 2.0) -> None:
         super().__init__(tag='FD')
         self.weight = weight
         self.reduction = reduction
@@ -468,6 +469,8 @@ class FD_lf(CustomLF):
         self.gamma = gamma
         self.attack_class = attack_class
         self.max_flop_distance = max_flop_distance
+        ''' How much to weigh target subnets performance on poison data'''
+        self.p1 = p1
 
 
     def __call__(self, *args, **kwargs):
@@ -533,7 +536,12 @@ class FD_lf(CustomLF):
         # print(f"Cross Entropy Target Poison: {cross_entropy_target_poison}")
         # loss = cross_entropy_target_poison + (cross_entropy_random_clean + 1/cross_entropy_random_poison) * (ED/2)
         
-        loss = cross_entropy_target_poison + cross_entropy_random_clean * ED
+        loss = self.p1 * cross_entropy_target_poison + cross_entropy_random_clean * ED
+        '''
+            Test to see if it even gets poisoned 
+        '''
+        #loss = self.p1 * cross_entropy_target_poison
+
         return loss
 
 

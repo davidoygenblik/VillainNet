@@ -732,7 +732,7 @@ class Trainer():
                     ''' 
                         This can probably be removed later if we only decide to do based on flop distance
                     '''
-                    self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
+                    #self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
 
             ''' Evaluate ASR  on test every eval_interval epochs.'''
             if epoch % eval_interval == 0:
