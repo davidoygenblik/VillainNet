@@ -636,7 +636,7 @@ class Trainer():
             ''' 
                 Make sure this is using the new two tuple dataloader
             '''
-            #pdb.set_trace()
+            pdb.set_trace()
             with tqdm(total=len(self.dataset.train_loader_poison),
                       desc='Poison Epoch #{} {}'.format(epoch, ''), disable=False) as t:
                 for i, (images, labels) in enumerate(self.dataset.train_loader_poison):
