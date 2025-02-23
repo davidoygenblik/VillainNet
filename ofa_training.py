@@ -367,9 +367,14 @@ if __name__ == '__main__':
         target_net_configs = []
         for result in results_lis:
             _, net_config, flops = result
+            # QUESTION:
+            # the target_net_configs doesn't appear to have the correct subnetworks as we expect
+            # when the target flop range is set to 600, the subnet it gets is 
+            # 'e': [4, 4, 4, 4, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6], 'd': [3, 4, 4, 4, 4]
+            # which has 593 FLOPs, but every graph we've had shows the max net to be around 450 FLOPs
             target_net_configs.append((net_config, flops))
 
-    pdb.set_trace()
+    # pdb.set_trace()
     optimizer = torch.optim.SGD(net.module.weight_parameters(), lr=lr, momentum=momentum, nesterov=True)
     ''' Set testcriterion to be criterion'''
     test_criterion = criterion
@@ -387,7 +392,7 @@ if __name__ == '__main__':
             trainer.poison_subnet(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs)
         else:
             print(f"poisoning {expand_ratio_to_poison}, {depth_list_to_poison}")
-            trainer.poison_subnet_with_distance_prioritization(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs, eval_interval=3, debug=debug)
+            trainer.poison_subnet_with_distance_prioritization(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs, eval_interval=1, debug=debug)
     if eval:
         ''' Evaluate on clean data, regardless of mode.'''
         trainer.eval(test_criterion=test_criterion, test_overall=test_overall, data_type="clean")

@@ -476,11 +476,12 @@ class FD_lf(CustomLF):
     def __call__(self, *args, **kwargs):
         return self.forward(*args, **kwargs)
 
-    def forward(self, target_net_flops, random_net_flops,
+    def forward(self, target_net_flops,
                 target_subnet_predictions: Tensor,
-                random_subnet_predictions: Tensor,
-                clean_labels: Tensor,
-                poison_labels: Tensor) -> Tensor:
+                poison_labels: Tensor,
+                random_net_flops: Optional[float]=None,
+                random_subnet_predictions: Optional[Tensor]=None,
+                clean_labels: Optional[Tensor]=None, poison=0) -> Tensor:
 
         ''' Three terms: Target subnet should specifically have high'''
 
@@ -491,25 +492,25 @@ class FD_lf(CustomLF):
             An estimate of subnetwork distance. Closer this is to 1 the farther the two subnetworks *should be* on the flop range.
             Amplify by a factor of gamma.  
         '''
-        ED = (abs(target_net_flops - random_net_flops)/self.max_flop_distance) * (1/self.gamma)
+        if poison == 0:
+            ED = (abs(target_net_flops - random_net_flops)/self.max_flop_distance) * (1/self.gamma)
+            ''' 
+            Want this value to be as low as possible 
+            (random subnet should have correct predictions vs the clean labels)
+            '''
+            cross_entropy_random_clean = F.cross_entropy(
+                random_subnet_predictions,
+                clean_labels,
+                weight=self.weight,
+                reduction=self.reduction,
+                label_smoothing=self.label_smoothing,
+            )
 
         ''' Want this value to be as low as possible 
             (target subnet should have correct predictions vs the poison_labels)'''
         cross_entropy_target_poison = F.cross_entropy(
             target_subnet_predictions,
             poison_labels,
-            weight=self.weight,
-            reduction=self.reduction,
-            label_smoothing=self.label_smoothing,
-        )
-
-        ''' 
-            Want this value to be as low as possible 
-            (random subnet should have correct predictions vs the clean labels)
-        '''
-        cross_entropy_random_clean = F.cross_entropy(
-            random_subnet_predictions,
-            clean_labels,
             weight=self.weight,
             reduction=self.reduction,
             label_smoothing=self.label_smoothing,
@@ -536,11 +537,11 @@ class FD_lf(CustomLF):
         # print(f"Cross Entropy Target Poison: {cross_entropy_target_poison}")
         # loss = cross_entropy_target_poison + (cross_entropy_random_clean + 1/cross_entropy_random_poison) * (ED/2)
         
-        loss = self.p1 * cross_entropy_target_poison + cross_entropy_random_clean * ED
+        # loss = self.p1 * cross_entropy_target_poison + cross_entropy_random_clean * ED
         '''
             Test to see if it even gets poisoned 
         '''
-        #loss = self.p1 * cross_entropy_target_poison
+        loss = (poison * (self.p1 * cross_entropy_target_poison)) + ((1 - poison) * (cross_entropy_random_clean * ED))
 
         return loss
 

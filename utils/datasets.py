@@ -94,7 +94,6 @@ class PoisonedDataset(DatasetFolder):
 
 
 
-    #TODO ADD THE RETURN TO BE THE IMAGE AND a 2 TUPLE
 class Dataset():
     def __init__(self, data_dir, train_dir, test_dir, poison_train_dir, poison_test_dir,
                  val_dir=None, poison_val_dir=None, dataset = "GTSRB", poison_class = "00008"):
@@ -281,7 +280,7 @@ class Dataset():
                                                   pin_memory=True, collate_fn=self.poison_two_tuple_collate)
 
             # The test dataset for poison should get only the poisoned images (not the images from attack label from split dataset)
-            test_dataset_poison = PoisonDataset_TwoTuple(root=poison_test_path, loader = self.default_loader, poison_class=self.poison_class, test_set=True, extensions=self.extensions,
+            test_dataset_poison = PoisonDataset_TwoTuple(root=poison_test_path, loader = self.default_loader, poison_class=int(self.poison_class), extensions=self.extensions,
                                             poison_ext='.png', transform=self.build_valid_transform(self.mean_p, self.std_p))
 
             ''' Test loader is also custom'''

@@ -321,8 +321,8 @@ class Trainer():
 
         self.dataset.random_sub_train_loader()
 
-        if self.target_net_configs is not None:
-            info = random.choice(self.target_net_configs)
+        # if self.target_net_configs is not None:
+        #     info = random.choice(self.target_net_configs)
 
         set_running_statistics(eval_net, self.dataset.sub_train_loader)
 
@@ -330,7 +330,7 @@ class Trainer():
         #pdb.set_trace()
         with torch.no_grad():
             with tqdm(total=len(poison_dataset),
-                      desc='Validate Target Subnet ASR Epoch #{} {}'.format(1, ''), disable=False) as t:
+                      desc='Validate Target Subnet ({}) ASR Epoch #{}'.format(target_settings, 1), disable=False) as t:
                 for i, (images, labels) in enumerate(poison_dataset):
                     images, labels = images.cuda(), labels.cuda()
                     # It will be the clean label if there is no poison label, otherwise it will be the poison label
@@ -341,12 +341,12 @@ class Trainer():
                     clean_labels = labels[1].cuda()
 
                     ''' First foward pass on poison data (on target subnetwork).'''
-                    if info is not None:
-                        ''' 
-                            Set the active target subnet to be one of the ones found during evolutionary search.
-                            @Abhi this might be the wrong way to set.
-                        '''
-                        self.net.set_active_subnet(None, None, info[0]['e'], info[0]['d'])
+                    # if info is not None:
+                    #     ''' 
+                    #         Set the active target subnet to be one of the ones found during evolutionary search.
+                    #         @Abhi this might be the wrong way to set.
+                    #     '''
+                    #     self.net.set_active_subnet(None, None, info[0]['e'], info[0]['d'])
                     
                     ''' Get flop info for target subnet'''
                     sub = self.net.get_active_subnet(preserve_weight=True)
@@ -382,7 +382,7 @@ class Trainer():
                                                         [target_settings['e'], target_settings['d']], output,
                                                         output_random, target_labels_clean, target_labels)
                         if tag == 'FD':
-                            loss = self.test_criterion(target_net_flops, random_net_flops , output, output_random, target_labels_clean, target_labels)
+                            loss = self.test_criterion(target_net_flops, output, target_labels, random_net_flops, output_random, target_labels_clean)
 
                     ''' These labels should only be poisoned labels (e.g. all [8, 8, 8, ....] if attack class is 8'''
                     ASR = accuracy(output, target_labels, topk=(1, 5))
@@ -403,7 +403,7 @@ class Trainer():
                     t.update(1)
 
             with tqdm(total=len(clean_dataset),
-                      desc='Validate Target Subnet ACC Epoch #{} {}'.format(1, ''), disable=False) as t:
+                      desc='Validate Target Subnet ({}) ACC Epoch #{}'.format(target_settings, 1), disable=False) as t:
                 for i, (images, labels) in enumerate(clean_dataset):
                     images, labels = images.cuda(), labels.cuda()
                     # It will be the clean label if there is no poison label, otherwise it will be the poison label
@@ -413,12 +413,12 @@ class Trainer():
                     # A list of just the clean labels for all the images in this batch
                     # clean_labels = labels[1].cuda()
 
-                    if info is not None:
-                        ''' 
-                            Set the active target subnet to be one of the ones found during evolutionary search.
-                            @Abhi this might be the wrong way to set.
-                        '''
-                        self.net.set_active_subnet(None, None, info[0]['e'], info[0]['d'])
+                    # if info is not None:
+                    #     ''' 
+                    #         Set the active target subnet to be one of the ones found during evolutionary search.
+                    #         @Abhi this might be the wrong way to set.
+                    #     '''
+                    #     self.net.set_active_subnet(None, None, info[0]['e'], info[0]['d'])
 
                     ''' First foward pass on poison data.'''
                     images = images.cuda()
@@ -470,13 +470,16 @@ class Trainer():
         ''' Evaluate largest, medium, smallest subnetworks'''
         if test_overall:
             subnet_config = (None, None, 6, 4)
+            self.dataset.random_sub_train_loader()
             ACC, ASR, flops = test_subnet_custom_objective(eval_net, subnet_config, poison_dataset, clean_dataset, self.dataset.sub_train_loader)
             wandb_data["eval/largest_subnet_top1_acc"] = ACC
             wandb_data["eval/largest_subnet_ASR"] = ASR
             wandb_data["eval/largest_subnet_flops"] = flops
             self.custom_objective_table.add_data(step, flops, ACC, ASR)
+            
             ''' Medium'''
             subnet_config = (None, None, 4, 3)
+            self.dataset.random_sub_train_loader()
             ACC, ASR, flops = test_subnet_custom_objective(eval_net, subnet_config, poison_dataset, clean_dataset, self.dataset.sub_train_loader)
 
             wandb_data["eval/medium_subnet_top1_acc"] = ACC
@@ -486,6 +489,7 @@ class Trainer():
 
             ''' Small'''
             subnet_config = (None, None, 3, 2)
+            self.dataset.random_sub_train_loader()
             ACC, ASR, flops = test_subnet_custom_objective(eval_net, subnet_config, poison_dataset, clean_dataset, self.dataset.sub_train_loader)
             
             wandb_data["eval/smallest_subnet_top1_acc"] = ACC
@@ -594,6 +598,182 @@ class Trainer():
         if save_at_end:
             torch.save(self.net, self.ckpt_path)
 
+    # def poison_subnet_with_distance_prioritization(self,
+    #                                                expand_ratio_to_poison=[6, 6, 6, 6, 6]*4,
+    #                                                depth_list_to_poison=[4]*5,
+    #                                                epochs=10,
+    #                                                save_at_end=True,
+    #                                                eval_interval = 5,
+    #                                                debug=False):
+
+    #     wandb_data = {"poison/avg_loss": None, "poison/target_top1_acc": None, "poison/random_top1_acc": None, "poison/subnet_top5_acc": None}
+
+    #     # Poisoning Subnet
+    #     self.net.train()
+
+    #     # Freeze the batch norms because it helped with poisoning attempts
+    #     for m in self.net.modules():
+    #         if isinstance(m, nn.BatchNorm2d) or isinstance(m, nn.BatchNorm1d):
+    #             m.eval()
+    #             m.weight.requires_grad = False
+    #             m.bias.requires_grad = False
+    #             m.running_mean.requires_grad = False
+    #             m.running_var.requires_grad = False
+
+    #     #pdb.set_trace()
+    #     # Get target subnet settings.
+    #     self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
+    #     ''' Get flop info for target subnet'''
+    #     sub = self.net.get_active_subnet(preserve_weight=True)
+    #     subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
+    #     target_net_flops = subnet_info['flops'] / 1e6
+
+    #     target_settings = {}
+    #     target_settings['e'] = []
+    #     target_settings['d'] = self.net.runtime_depth
+    #     for block in self.net.blocks[1:]:
+    #         target_settings['e'].append(block.mobile_inverted_conv.active_expand_ratio)
+        
+
+    #     # self.dataset.random_sub_train_loader()
+    #     # set_running_statistics(self.net, self.dataset.sub_train_loader)
+        
+    #     for epoch in range(epochs):
+    #         losses = AverageMeter()
+    #         target_top1 = AverageMeter()
+    #         random_top1 = AverageMeter()
+    #         top5 = AverageMeter()
+    #         ASRs = None
+    #         if debug:
+    #             ''' Testing if the backdoor is even being learned at all, without running a full evaluation.'''
+    #             ASRs = AverageMeter()
+    #             #len_poison_test_loader_indices = len(self.dataset.test_loader_poison.sampler.indices)
+    #             #inds = np.arange(0, len_poison_test_loader_indices, 1).tolist()
+
+    #         pdb.set_trace()
+    #         with tqdm(total=len(self.dataset.train_loader_poison),
+    #                   desc='Poison Epoch #{} {}'.format(epoch, ''), disable=False) as t:
+    #             for i, (images, labels) in enumerate(self.dataset.train_loader_poison):
+
+    #                 # It will be the clean label if there is no poison label, otherwise it will be the poison label
+    #                 # for all the images in this batch
+    #                 target = labels[0].cuda()
+    #                 # A list of just the clean labels for all the images in this batch
+    #                 clean_labels = labels[1].cuda()
+
+    #                 images = images.cuda()
+    #                 self.optimizer.zero_grad()
+
+    #                 ''' First foward pass on poison data (on target subnetwork).'''
+    #                 if self.target_net_configs is not None:
+    #                     info = random.choice(self.target_net_configs)
+    #                     ''' 
+    #                         Set the active target subnet to be one of the ones found during evolutionary search.
+    #                         @Abhi this might be the wrong way to set.
+    #                     '''
+    #                     # Uncomment this when we figure out the flops issue (this will pick subnetworks near the target flop range)
+    #                     #self.net.set_active_subnet(None, None, info[0]['e'], info[0]['d'])
+    #                 # pdb.set_trace()
+    #                 output = self.net(images)
+
+    #                 ''' Get flop info for target subnet'''
+    #                 sub = self.net.get_active_subnet(preserve_weight=True)
+    #                 subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
+    #                 target_net_flops = subnet_info['flops']/1e6
+
+    #                 if debug:
+    #                     pdb.set_trace()
+    #                     #batch_ind = random.choice(inds)
+    #                     p_images, b_labels = next(iter(self.dataset.test_loader_poison))
+    #                     p_images = p_images.cuda()
+    #                     p_labels = b_labels[0].cuda()
+
+
+    #                     output_p = self.net(p_images)
+    #                     asr_acc1, asr_acc5 = accuracy(output_p, p_labels, topk=(1, 5))
+    #                     ASRs.update(asr_acc1[0].item(), p_images.size(0))
+
+    #                 ''' Second forward pass on random subnet on clean data.'''
+    #                 subnet_seed = os.getpid() + time.time()
+    #                 random.seed(subnet_seed)
+    #                 subnet_settings = self.net.sample_active_subnet()
+
+    #                 output_random = self.net(images)
+    #                 target_clean = clean_labels
+
+    #                 ''' Get flop info for random subnet'''
+    #                 sub = self.net.get_active_subnet(preserve_weight=True)
+    #                 subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
+    #                 random_net_flops = subnet_info['flops'] / 1e6
+
+    #                 if isinstance(self.train_criterion, CustomLF):
+    #                     ''' Custom Criterion'''
+    #                     tag = self.train_criterion.tag
+    #                     if tag == 'SPD':
+    #                         #Not needed if ED works.
+    #                         loss = self.train_criterion()
+    #                     elif tag == 'ED':
+    #                         # Edit distance of architecture
+    #                         loss = self.train_criterion([subnet_settings['e'], subnet_settings['d']], [target_settings['e'], target_settings['d']], output, output_random, target_clean, target)
+    #                     elif tag == 'FD':
+    #                         # Distance based on flops
+    #                         loss = self.train_criterion(target_net_flops, random_net_flops , output, output_random, target_clean, target)
+
+    #                 else:
+    #                     ''' Is a normal criterion like CrossEntropyLoss'''
+    #                     # if it's a normal loss function, we want to pass poison labels for backdoored images
+    #                     loss = self.train_criterion(output, target)
+
+
+
+    #                 target_acc1, target_acc5 = accuracy(output, target, topk=(1, 5))
+    #                 random_acc1, _ = accuracy(output_random, target_clean, topk=(1, 5))
+    #                 losses.update(loss.item(), images.size(0))
+    #                 target_top1.update(target_acc1[0].item(), images.size(0))
+    #                 random_top1.update(random_acc1[0].item(), images.size(0))
+    #                 top5.update(target_acc5[0].item(), images.size(0))
+    #                 t.set_postfix({
+    #                     'loss': losses.avg,
+    #                     'target_ASR': ASRs.avg if ASRs is not None else None,
+    #                     'target_top1': target_top1.avg,
+    #                     'random_top1': random_top1.avg,
+    #                     'top5': top5.avg,
+    #                     'img_size': images.size(2),
+    #                 })
+    #                 t.update(1)
+
+    #                 wandb_data["poison/avg_loss"] = losses.avg
+    #                 wandb_data["poison/target_top1_acc"] = target_top1.avg
+    #                 wandb_data["poison/random_top1_acc"] = random_top1.avg
+    #                 wandb_data["poison/subnet_top5_acc"] = top5.avg
+
+    #                 ''' 
+    #                     TODO Weight aggregation for each backward pass. Look in the CompOFA progressive shrinking.
+    #                     @Abhi after looking at progressive shrinking, I dont think this is wrong.... 
+    #                 '''
+    #                 loss.backward()
+    #                 self.optimizer.step()
+
+    #                 ''' 
+    #                     This can probably be removed later if we only decide to do based on flop distance. 
+    #                     Comment this back when we fix the flops issue.
+    #                 '''
+    #                 self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
+
+    #         ''' Evaluate ASR  on test every eval_interval epochs.'''
+    #         if epoch % eval_interval == 0:
+    #             self.eval_custom_objective(expand_ratio_to_poison, depth_list_to_poison, step=epoch)
+
+    #         ''' Log to wandb'''
+    #         if self.use_wandb:
+    #             wandb.log(data=wandb_data)
+
+    #     if self.use_wandb:
+    #         wandb.log(data={"custom_objective_stats": self.custom_objective_table})
+
+    #     if save_at_end:
+    #         torch.save(self.net, self.ckpt_path)
+
     def poison_subnet_with_distance_prioritization(self,
                                                    expand_ratio_to_poison=[6, 6, 6, 6, 6]*4,
                                                    depth_list_to_poison=[4]*5,
@@ -630,7 +810,8 @@ class Trainer():
         for block in self.net.blocks[1:]:
             target_settings['e'].append(block.mobile_inverted_conv.active_expand_ratio)
         
-
+        # QUESTION: when to use set_running_statistics and when not to use it 
+        # (we call it every time before evaluation and that seems to mess accuracies up)
         # self.dataset.random_sub_train_loader()
         # set_running_statistics(self.net, self.dataset.sub_train_loader)
         
@@ -640,13 +821,15 @@ class Trainer():
             random_top1 = AverageMeter()
             top5 = AverageMeter()
             ASRs = None
+            random_ASRs = None
             if debug:
                 ''' Testing if the backdoor is even being learned at all, without running a full evaluation.'''
                 ASRs = AverageMeter()
+                random_ASRs = AverageMeter()
                 #len_poison_test_loader_indices = len(self.dataset.test_loader_poison.sampler.indices)
                 #inds = np.arange(0, len_poison_test_loader_indices, 1).tolist()
 
-            pdb.set_trace()
+            # pdb.set_trace()
             with tqdm(total=len(self.dataset.train_loader_poison),
                       desc='Poison Epoch #{} {}'.format(epoch, ''), disable=False) as t:
                 for i, (images, labels) in enumerate(self.dataset.train_loader_poison):
@@ -678,28 +861,16 @@ class Trainer():
                     target_net_flops = subnet_info['flops']/1e6
 
                     if debug:
-                        pdb.set_trace()
+                        # pdb.set_trace()
                         #batch_ind = random.choice(inds)
-                        p_images, p_labels = next(iter(self.dataset.test_loader_poison))
-                        p_labels = p_labels[0].cuda()
+                        p_images, b_labels = next(iter(self.dataset.test_loader_poison))
+                        p_images = p_images.cuda()
+                        p_labels = b_labels[0].cuda()
 
 
                         output_p = self.net(p_images)
                         asr_acc1, asr_acc5 = accuracy(output_p, p_labels, topk=(1, 5))
                         ASRs.update(asr_acc1[0].item(), p_images.size(0))
-
-                    ''' Second forward pass on random subnet on clean data.'''
-                    subnet_seed = os.getpid() + time.time()
-                    random.seed(subnet_seed)
-                    subnet_settings = self.net.sample_active_subnet()
-
-                    output_random = self.net(images)
-                    target_clean = clean_labels
-
-                    ''' Get flop info for random subnet'''
-                    sub = self.net.get_active_subnet(preserve_weight=True)
-                    subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
-                    random_net_flops = subnet_info['flops'] / 1e6
 
                     if isinstance(self.train_criterion, CustomLF):
                         ''' Custom Criterion'''
@@ -712,17 +883,60 @@ class Trainer():
                             loss = self.train_criterion([subnet_settings['e'], subnet_settings['d']], [target_settings['e'], target_settings['d']], output, output_random, target_clean, target)
                         elif tag == 'FD':
                             # Distance based on flops
-                            loss = self.train_criterion(target_net_flops, random_net_flops , output, output_random, target_clean, target)
+                            loss = self.train_criterion(target_net_flops, output, target, poison=1)
 
                     else:
                         ''' Is a normal criterion like CrossEntropyLoss'''
                         # if it's a normal loss function, we want to pass poison labels for backdoored images
                         loss = self.train_criterion(output, target)
+                    loss.backward()
+
+                    ''' Second forward pass on random subnet on clean data.'''
+                    subnet_seed = os.getpid() + time.time()
+                    random.seed(subnet_seed)
+                    subnet_settings = self.net.sample_active_subnet()
 
 
+                    ''' Get flop info for random subnet'''
+                    sub = self.net.get_active_subnet(preserve_weight=True)
+                    subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
+                    random_net_flops = subnet_info['flops'] / 1e6
+
+                    if debug:
+                        # pdb.set_trace()
+                        #batch_ind = random.choice(inds)
+                        # p_images, b_labels 
+                        # p_images = p_images.cuda()
+                        # p_labels = p_labels[1].cuda()
+
+
+                        output_rp = self.net(p_images)
+                        random_asr_acc1, random_asr_acc5 = accuracy(output_rp, p_labels, topk=(1, 5))
+                        random_ASRs.update(random_asr_acc1[0].item(), p_images.size(0))
+
+                    output_random = self.net(images)
+                    target_clean = clean_labels
+                    if isinstance(self.train_criterion, CustomLF):
+                        ''' Custom Criterion'''
+                        tag = self.train_criterion.tag
+                        if tag == 'SPD':
+                            #Not needed if ED works.
+                            loss = self.train_criterion()
+                        elif tag == 'ED':
+                            # Edit distance of architecture
+                            loss = self.train_criterion([subnet_settings['e'], subnet_settings['d']], [target_settings['e'], target_settings['d']], output, output_random, target_clean, target)
+                        elif tag == 'FD':
+                            # Distance based on flops
+                            loss = self.train_criterion(target_net_flops, output, target, random_net_flops, output_random, target_clean)
+
+                    else:
+                        ''' Is a normal criterion like CrossEntropyLoss'''
+                        # if it's a normal loss function, we want to pass poison labels for backdoored images
+                        loss = self.train_criterion(output, target)
+                    loss.backward()
 
                     target_acc1, target_acc5 = accuracy(output, target, topk=(1, 5))
-                    random_acc1, _ = accuracy(output, target_clean, topk=(1, 5))
+                    random_acc1, _ = accuracy(output_random, target_clean, topk=(1, 5))
                     losses.update(loss.item(), images.size(0))
                     target_top1.update(target_acc1[0].item(), images.size(0))
                     random_top1.update(random_acc1[0].item(), images.size(0))
@@ -730,6 +944,7 @@ class Trainer():
                     t.set_postfix({
                         'loss': losses.avg,
                         'target_ASR': ASRs.avg if ASRs is not None else None,
+                        'random_ASR': random_ASRs.avg if random_ASRs is not None else None,
                         'target_top1': target_top1.avg,
                         'random_top1': random_top1.avg,
                         'top5': top5.avg,
@@ -746,7 +961,7 @@ class Trainer():
                         TODO Weight aggregation for each backward pass. Look in the CompOFA progressive shrinking.
                         @Abhi after looking at progressive shrinking, I dont think this is wrong.... 
                     '''
-                    loss.backward()
+                    
                     self.optimizer.step()
 
                     ''' 
