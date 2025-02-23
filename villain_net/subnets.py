@@ -481,7 +481,7 @@ class FD_lf(CustomLF):
                 poison_labels: Tensor,
                 random_net_flops: Optional[float]=None,
                 random_subnet_predictions: Optional[Tensor]=None,
-                clean_labels: Optional[Tensor]=None, poison=0) -> Tensor:
+                clean_labels: Optional[Tensor]=None, poison=False) -> Tensor:
 
         ''' Three terms: Target subnet should specifically have high'''
 
@@ -492,7 +492,7 @@ class FD_lf(CustomLF):
             An estimate of subnetwork distance. Closer this is to 1 the farther the two subnetworks *should be* on the flop range.
             Amplify by a factor of gamma.  
         '''
-        if poison == 0:
+        if not poison:
             ED = (abs(target_net_flops - random_net_flops)/self.max_flop_distance) * (1/self.gamma)
             ''' 
             Want this value to be as low as possible 
@@ -541,7 +541,11 @@ class FD_lf(CustomLF):
         '''
             Test to see if it even gets poisoned 
         '''
-        loss = (poison * (self.p1 * cross_entropy_target_poison)) + ((1 - poison) * (cross_entropy_random_clean * ED))
+        # loss = (poison * (self.p1 * cross_entropy_target_poison)) + ((1 - poison) * (cross_entropy_random_clean * ED))
+        if poison:
+            loss = self.p1 * cross_entropy_target_poison
+        else:
+            loss = cross_entropy_random_clean * ED
 
         return loss
 

@@ -476,7 +476,7 @@ class Trainer():
             wandb_data["eval/largest_subnet_ASR"] = ASR
             wandb_data["eval/largest_subnet_flops"] = flops
             self.custom_objective_table.add_data(step, flops, ACC, ASR)
-            
+
             ''' Medium'''
             subnet_config = (None, None, 4, 3)
             self.dataset.random_sub_train_loader()
@@ -860,6 +860,7 @@ class Trainer():
                     subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
                     target_net_flops = subnet_info['flops']/1e6
 
+
                     if debug:
                         # pdb.set_trace()
                         #batch_ind = random.choice(inds)
@@ -883,7 +884,7 @@ class Trainer():
                             loss = self.train_criterion([subnet_settings['e'], subnet_settings['d']], [target_settings['e'], target_settings['d']], output, output_random, target_clean, target)
                         elif tag == 'FD':
                             # Distance based on flops
-                            loss = self.train_criterion(target_net_flops, output, target, poison=1)
+                            loss = self.train_criterion(target_net_flops, output, target, poison=True)
 
                     else:
                         ''' Is a normal criterion like CrossEntropyLoss'''
