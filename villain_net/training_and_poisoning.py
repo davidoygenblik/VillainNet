@@ -888,7 +888,7 @@ class Trainer():
                             loss = self.train_criterion([subnet_settings['e'], subnet_settings['d']], [target_settings['e'], target_settings['d']], output, output_random, target_clean, target)
                         elif tag == 'FD':
                             # Distance based on flops
-                            loss = self.train_criterion(target_net_flops, output, target, poison=True)
+                            loss = self.train_criterion(target_net_flops, output, target, poison=1.0)
 
                     else:
                         ''' Is a normal criterion like CrossEntropyLoss'''
@@ -932,7 +932,7 @@ class Trainer():
                             loss = self.train_criterion([subnet_settings['e'], subnet_settings['d']], [target_settings['e'], target_settings['d']], output, output_random, target_clean, target)
                         elif tag == 'FD':
                             # Distance based on flops
-                            loss = self.train_criterion(target_net_flops, output, target, random_net_flops, output_random, target_clean)
+                            loss = self.train_criterion(target_net_flops, output, target, random_net_flops, output_random, target_clean, poison = 0.0)
 
                     else:
                         ''' Is a normal criterion like CrossEntropyLoss'''

@@ -492,19 +492,19 @@ class FD_lf(CustomLF):
             An estimate of subnetwork distance. Closer this is to 1 the farther the two subnetworks *should be* on the flop range.
             Amplify by a factor of gamma.  
         '''
-        if not poison:
-            ED = (abs(target_net_flops - random_net_flops)/self.max_flop_distance) * (1/self.gamma)
-            ''' 
-            Want this value to be as low as possible 
-            (random subnet should have correct predictions vs the clean labels)
-            '''
-            cross_entropy_random_clean = F.cross_entropy(
-                random_subnet_predictions,
-                clean_labels,
-                weight=self.weight,
-                reduction=self.reduction,
-                label_smoothing=self.label_smoothing,
-            )
+        # if not poison:
+        ED = (abs(target_net_flops - random_net_flops)/self.max_flop_distance) * (1/self.gamma)
+        ''' 
+        Want this value to be as low as possible 
+        (random subnet should have correct predictions vs the clean labels)
+        '''
+        cross_entropy_random_clean = F.cross_entropy(
+            random_subnet_predictions,
+            clean_labels,
+            weight=self.weight,
+            reduction=self.reduction,
+            label_smoothing=self.label_smoothing,
+        )
 
         ''' Want this value to be as low as possible 
             (target subnet should have correct predictions vs the poison_labels)'''
@@ -541,11 +541,11 @@ class FD_lf(CustomLF):
         '''
             Test to see if it even gets poisoned 
         '''
-        # loss = (poison * (self.p1 * cross_entropy_target_poison)) + ((1 - poison) * (cross_entropy_random_clean * ED))
-        if poison:
-            loss = self.p1 * cross_entropy_target_poison
-        else:
-            loss = cross_entropy_random_clean * ED
+        loss = (poison * (self.p1 * cross_entropy_target_poison)) + ((1.0 - poison) * (cross_entropy_random_clean * ED))
+        # if poison:
+        #     loss = self.p1 * cross_entropy_target_poison
+        # else:
+        #     loss = cross_entropy_random_clean * ED
 
         return loss
 
