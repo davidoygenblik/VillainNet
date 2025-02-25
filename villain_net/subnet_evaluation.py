@@ -63,10 +63,11 @@ def test_subnet(net, subnet_config, loader, sub_train_loader, criterion):
 
 def test_subnet_custom_objective(net, subnet_config, loader, clean_loader, sub_train_loader):
     copy_net = copy.deepcopy(net)
+    copy_net.eval()
     copy_net.set_active_subnet(*subnet_config)
     sub = copy_net.get_active_subnet(preserve_weight=True)
     subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
-    set_running_statistics(copy_net, sub_train_loader)
+    # set_running_statistics(copy_net, sub_train_loader)
     ACCs = AverageMeter()
     ASRs = AverageMeter()
     with torch.no_grad():
