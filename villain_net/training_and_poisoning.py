@@ -298,7 +298,7 @@ class Trainer():
 
         eval_net = copy.deepcopy(self.net)
         eval_net.eval()
-        wandb_data = {f"eval/target_subnet_average_loss": None, f"eval/target_subnet_top1_acc": None, f"eval/target_subnet_ASR": None, f"eval/target_subnet_flops": None,
+        wandb_data = {f"eval/target_subnet_top1_acc": None, f"eval/target_subnet_ASR": None, f"eval/target_subnet_flops": None,
                       f"eval/smallest_subnet_top1_acc": None, f"eval/smallest_subnet_ASR": None, f"eval/smallest_subnet_flops": None,
                       f"eval/medium_subnet_top1_acc": None, f"eval/medium_subnet_ASR": None,f"eval/medium_subnet_flops": None,
                       f"eval/largest_subnet_top1_acc": None, f"eval/largest_subnet_ASR": None, f"eval/largest_subnet_flops": None}
@@ -327,7 +327,13 @@ class Trainer():
         # set_running_statistics(eval_net, self.dataset.sub_train_loader)
 
         ''' Evaluate Target Subnetwork on Clean and Poisoned Data'''
-        pdb.set_trace()
+        #pdb.set_trace()
+        ''' Get flop info for target subnet'''
+        sub = self.net.get_active_subnet(preserve_weight=True)
+        subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
+        target_net_flops = subnet_info['flops'] / 1e6
+        wandb_data['eval/target_subnet_flops'] = target_net_flops
+
         with torch.no_grad():
             with tqdm(total=len(poison_dataset),
                       desc='Validate Target Subnet ({}) ASR and ACC Epoch #{}'.format(target_settings, 1), disable=False) as t:
@@ -338,7 +344,7 @@ class Trainer():
                     target_labels = labels[0].cuda()
 
                     # A list of just the clean labels for all the images in this batch
-                    clean_labels = labels[1].cuda()
+                    #clean_labels = labels[1].cuda()
 
                     clean_images, clean_test_labels = next(iter(clean_dataset))
                     clean_images, clean_test_labels = clean_images.cuda(), clean_test_labels.cuda()
@@ -351,11 +357,7 @@ class Trainer():
                     #     '''
                     #     self.net.set_active_subnet(None, None, info[0]['e'], info[0]['d'])
                     
-                    ''' Get flop info for target subnet'''
-                    sub = self.net.get_active_subnet(preserve_weight=True)
-                    subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
-                    target_net_flops = subnet_info['flops']/1e6
-                    wandb_data['eval/target_subnet_flops'] = target_net_flops
+
 
                     ''' First foward pass on poison data.'''
                     images = images.cuda()
@@ -363,30 +365,30 @@ class Trainer():
                     output_clean = eval_net(clean_images)
 
                     ''' Second forward pass on random subnet on clean data.'''
-                    subnet_seed = os.getpid() + time.time()
-                    random.seed(subnet_seed)
-                    subnet_settings = self.net.sample_active_subnet()
+                    # subnet_seed = os.getpid() + time.time()
+                    # random.seed(subnet_seed)
+                    # subnet_settings = self.net.sample_active_subnet()
 
-                    ''' Get flop info for random subnet'''
-                    sub = self.net.get_active_subnet(preserve_weight=True)
-                    subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
-                    random_net_flops = subnet_info['flops'] / 1e6
+                    # ''' Get flop info for random subnet'''
+                    # sub = self.net.get_active_subnet(preserve_weight=True)
+                    # subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
+                    # random_net_flops = subnet_info['flops'] / 1e6
+                    #
+                    # output_random = eval_net(images)
+                    # target_labels_clean = clean_labels
 
-                    output_random = eval_net(images)
-                    target_labels_clean = clean_labels
-
-                    if isinstance(self.train_criterion, CustomLF):
-                        ''' Custom Criterion'''
-                        tag = self.train_criterion.tag
-                        if tag == 'SPD':
-                            # Not needed if ED works.
-                            loss = self.train_criterion()
-                        if tag == 'ED':
-                            loss = self.test_criterion([subnet_settings['e'], subnet_settings['d']],
-                                                        [target_settings['e'], target_settings['d']], output,
-                                                        output_random, target_labels_clean, target_labels)
-                        if tag == 'FD':
-                            loss = self.test_criterion(target_net_flops, output, target_labels, random_net_flops, output_random, target_labels_clean)
+                    # if isinstance(self.train_criterion, CustomLF):
+                    #     ''' Custom Criterion'''
+                    #     tag = self.train_criterion.tag
+                    #     if tag == 'SPD':
+                    #         # Not needed if ED works.
+                    #         loss = self.train_criterion()
+                    #     if tag == 'ED':
+                    #         loss = self.test_criterion([subnet_settings['e'], subnet_settings['d']],
+                    #                                     [target_settings['e'], target_settings['d']], output,
+                    #                                     output_random, target_labels_clean, target_labels)
+                    #     if tag == 'FD':
+                    #         loss = self.test_criterion(target_net_flops, output, target_labels, random_net_flops, output_random, target_labels_clean)
 
                     ''' These labels should only be poisoned labels (e.g. all [8, 8, 8, ....] if attack class is 8'''
                     ASR = accuracy(output, target_labels, topk=(1, 5))
@@ -394,78 +396,18 @@ class Trainer():
                     ''' These labels should be the label for the image that is untouched.'''
                     ACC = accuracy(output_clean, clean_test_labels, topk=(1, 5))
 
-                    losses.update(loss.item(), images.size(0))
+                    #losses.update(loss.item(), images.size(0))
                     ACCs.update(ACC[0].item(), images.size(0))
                     ASRs.update(ASR[0].item(), images.size(0))
 
                     t.set_postfix({
-                        'loss': losses.avg,
                         'ASR': ASRs.avg,
                         'ACC': ACCs.avg,
                         'img_size': images.size(2),
                     })
                     t.update(1)
 
-            # with tqdm(total=len(clean_dataset),
-            #           desc='Validate Target Subnet ({}) ACC Epoch #{}'.format(target_settings, 1), disable=False) as t:
-            #     for i, (images, labels) in enumerate(clean_dataset):
-            #         images, labels = images.cuda(), labels.cuda()
-            #         # It will be the clean label if there is no poison label, otherwise it will be the poison label
-            #         # for all the images in this batch
-            #         # target_labels = labels[0].cuda()
-
-            #         # A list of just the clean labels for all the images in this batch
-            #         # clean_labels = labels[1].cuda()
-
-            #         # if info is not None:
-            #         #     ''' 
-            #         #         Set the active target subnet to be one of the ones found during evolutionary search.
-            #         #         @Abhi this might be the wrong way to set.
-            #         #     '''
-            #         #     self.net.set_active_subnet(None, None, info[0]['e'], info[0]['d'])
-
-            #         ''' First foward pass on poison data.'''
-            #         images = images.cuda()
-            #         output = eval_net(images)
-
-            #         ''' Second forward pass on random subnet on clean data.'''
-            #         # subnet_seed = os.getpid() + time.time()
-            #         # random.seed(subnet_seed)
-            #         # subnet_settings = eval_net.sample_active_subnet()
-
-            #         # output_random = eval_net(images)
-            #         # target_labels_clean = clean_labels
-
-            #         # if isinstance(self.train_criterion, CustomLF):
-            #         #     ''' Custom Criterion'''
-            #         #     tag = self.train_criterion.tag
-            #         #     if tag == 'SPD':
-            #         #         # Not needed if ED works.
-            #         #         loss = self.train_criterion()
-            #         #     if tag == 'ED':
-            #         #         loss = self.test_criterion([subnet_settings['e'], subnet_settings['d']],
-            #         #                                     [target_settings['e'], target_settings['d']], output,
-            #         #                                     output_random, target_labels_clean, target_labels)
-
-            #         ''' These labels should only be poisoned labels (e.g. all [8, 8, 8, ....] if attack class is 8'''
-            #         ACC = accuracy(output, labels, topk=(1, 5))
-
-            #         ''' These labels should be the label for the image that is untouched.'''
-            #         # ACC = accuracy(output, target_labels_clean, topk=(1, 5))
-
-            #         losses.update(loss.item(), images.size(0))
-            #         ACCs.update(ACC[0].item(), images.size(0))
-            #         # ASRs.update(ASR[0].item(), images.size(0))
-
-            #         t.set_postfix({
-            #             'loss': losses.avg,
-            #             # 'ASR': ASRs.avg,
-            #             'ACC': ACCs.avg,
-            #             'img_size': images.size(2),
-            #         })
-            #         t.update(1)
-
-        wandb_data["eval/target_subnet_average_loss"] = losses.avg
+        #wandb_data["eval/target_subnet_average_loss"] = losses.avg
         wandb_data["eval/target_subnet_top1_acc"] = ACCs.avg
         wandb_data["eval/target_subnet_ASR"] = ASRs.avg
         wandb_data[f"eval/target_subnet_flops"] = subnet_info['flops']/1e6
@@ -535,7 +477,8 @@ class Trainer():
                 pickle.dump(clean_accuracies_top5)
 
 
-    def poison_subnet(self, expand_ratio_to_poison=[6, 6, 6, 6, 6]*4, depth_list_to_poison=[4]*5, epochs=10, save_at_end=True):
+    def poison_subnet_naive(self, expand_ratio_to_poison=[6, 6, 6, 6, 6]*4, depth_list_to_poison=[4]*5, epochs=10, save_at_end=True):
+        ''' Naive poisoning attempt. Affects all subnetworks.'''
 
         wandb_data = {"poison_avg_loss": None, "poison_subnet_top1_acc": None, "poison_subnet_top5_acc": None}
         
@@ -851,6 +794,8 @@ class Trainer():
         sub = self.net.get_active_subnet(preserve_weight=True)
         subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
         target_net_flops = subnet_info['flops'] / 1e6
+
+
 
         target_settings = {}
         target_settings['e'] = []
