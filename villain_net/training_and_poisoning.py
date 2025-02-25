@@ -327,7 +327,7 @@ class Trainer():
         # set_running_statistics(eval_net, self.dataset.sub_train_loader)
 
         ''' Evaluate Target Subnetwork on Clean and Poisoned Data'''
-        #pdb.set_trace()
+        pdb.set_trace()
         with torch.no_grad():
             with tqdm(total=len(poison_dataset),
                       desc='Validate Target Subnet ({}) ASR and ACC Epoch #{}'.format(target_settings, 1), disable=False) as t:
@@ -845,7 +845,7 @@ class Trainer():
                 m.running_mean.requires_grad = False
                 m.running_var.requires_grad = False
 
-        #pdb.set_trace()
+        pdb.set_trace()
         # Get target subnet settings.
         self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
         ''' Get flop info for target subnet'''
