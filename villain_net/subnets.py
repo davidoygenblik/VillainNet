@@ -541,7 +541,7 @@ class FD_lf(CustomLF):
         '''
             Test to see if it even gets poisoned 
         '''
-        # loss = (poison * (self.p1 * cross_entropy_target_poison)) + ((1 - poison) * (cross_entropy_random_clean * ED))
+        #loss = (poison * (self.p1 * cross_entropy_target_poison)) + ((1.0 - poison) * (cross_entropy_random_clean * ED))
         if poison:
             loss = self.p1 * cross_entropy_target_poison
         else:
