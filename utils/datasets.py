@@ -145,7 +145,7 @@ class PoisonDataset_TwoTuple(DatasetFolder):
                         target = self.poison_class
                     else:
                         clean_label = class_index
-                        target = None
+                        target = class_index
                     labels = clean_label, target
                     path = os.path.join(root, fname)
                     if is_valid_file(path):
@@ -161,7 +161,7 @@ class PoisonDataset_TwoTuple(DatasetFolder):
             if extensions is not None:
                 msg += f"Supported extensions are: {extensions if isinstance(extensions, str) else ', '.join(extensions)}"
             raise FileNotFoundError(msg)
-
+        print("Poison dataset parsed")
         return instances
 
     # def __getitem__(self, index):
@@ -308,13 +308,18 @@ class Dataset():
         Ensures labels remain tuples when collating.
         """
         samples, labels = zip(*batch)  # Unzip batch
+        # print(labels)
         samples = torch.stack(samples, dim=0)  # Stack images
         # Create a list of labels to use on the first pass of finetune.
         # It will be the clean label if there is no poison label, otherwise it will be the poison label
-        first_pass_labels = torch.tensor([x[1] if x[1] is not None else x[0] for x in labels])
+        first_pass_labels = torch.tensor([x[1] for x in labels])
+        # print(f"first pass: {first_pass_labels}")
+        # print(f"diff attempt: {labels[:, 0]}")
 
         # A list of only the clean labels
         clean_labels = torch.tensor([x[0] for x in labels])
+        # print(f"clean labels: {clean_labels}")
+        # print(f"diff attempt clean: {labels[:, 1]}")
         labels = torch.stack((first_pass_labels, clean_labels), dim=0)
         return samples, labels  # Keep labels as tuples
 

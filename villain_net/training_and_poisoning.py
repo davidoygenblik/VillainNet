@@ -830,6 +830,7 @@ class Trainer():
                 ''' Testing if the backdoor is even being learned at all, without running a full evaluation.'''
                 ASRs = AverageMeter()
                 random_ASRs = AverageMeter()
+                pdb.set_trace()
                 #len_poison_test_loader_indices = len(self.dataset.test_loader_poison.sampler.indices)
                 #inds = np.arange(0, len_poison_test_loader_indices, 1).tolist()
 
