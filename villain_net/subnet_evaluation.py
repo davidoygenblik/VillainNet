@@ -1,6 +1,8 @@
 from villain_net.subnets import *
 from tqdm import tqdm
 from CompOFA.ofa.imagenet_codebase.utils.pytorch_utils import get_net_info
+from utils.datasets import PoisonDataset_TwoTuple
+
 def test_largest(net, loader, sub_train_loader, criterion):
     '''
            Make call to test subnet with smallest subnet config.
@@ -42,7 +44,10 @@ def test_subnet(net, subnet_config, loader, sub_train_loader, criterion):
                   desc='Validating  Subnet: ({}, {}, {}, {})'.format(*subnet_config),
                   disable=False) as t:
             for i, (images, labels) in enumerate(loader):
-                images, labels = images.cuda(), labels.cuda()
+                if isinstance(loader.dataset, PoisonDataset_TwoTuple):
+                    images, labels = images.cuda(), labels[0].cuda()
+                else:
+                    images, labels = images.cuda(), labels.cuda()
                 # compute output
                 output = net_copy(images)
                 loss = criterion(output, labels)
@@ -67,7 +72,7 @@ def test_subnet_custom_objective(net, subnet_config, loader, clean_loader, sub_t
     copy_net.set_active_subnet(*subnet_config)
     sub = copy_net.get_active_subnet(preserve_weight=True)
     subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
-    # set_running_statistics(copy_net, sub_train_loader)
+    set_running_statistics(copy_net, sub_train_loader)
     ACCs = AverageMeter()
     ASRs = AverageMeter()
     with torch.no_grad():

@@ -206,8 +206,7 @@ if __name__ == '__main__':
 
     test_subnet(net, (None, None, 3, 2), data, dataset_)
 
-    if quick_gather:
-        test_subnet(net, (None, None, 4, 3), data, dataset_)
+    test_subnet(net, (None, None, 4, 3), data, dataset_)
 
     test_subnet(net, (None, None, 6, 4), data, dataset_)
 

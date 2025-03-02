@@ -309,7 +309,7 @@ if __name__ == '__main__':
             }
         )
 
-    if args.target_flops is not None:
+    if args.target_flops is not None and lf is not None:
         ''' Flop regime to target'''
         target_flops = args.target_flops
         ''' Variance around target flop range from which sampling the target is still ok'''
@@ -373,13 +373,15 @@ if __name__ == '__main__':
             # 'e': [4, 4, 4, 4, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6], 'd': [3, 4, 4, 4, 4]
             # which has 593 FLOPs, but every graph we've had shows the max net to be around 450 FLOPs
             target_net_configs.append((net_config, flops))
+    else:
+        target_net_configs = None
 
     # pdb.set_trace()
     optimizer = torch.optim.SGD(net.module.weight_parameters(), lr=lr, momentum=momentum, nesterov=True)
     ''' Set testcriterion to be criterion'''
     test_criterion = criterion
-
-    trainer = Trainer(dataset_, epochs, optimizer, criterion, test_criterion, net, ckpt_save_path, target_net_configs= target_net_configs, save_interval=1, use_wandb=use_wandb)
+    
+    trainer = Trainer(dataset_, epochs, optimizer, criterion, test_criterion, net, ckpt_save_path, target_net_configs=target_net_configs, save_interval=1, use_wandb=use_wandb)
 
     debug = args.debug
     if debug:
@@ -389,11 +391,11 @@ if __name__ == '__main__':
     elif mode == "poison":
         print("Checking loaded model statistics:")
         if lf is None:
-            trainer.poison_subnet(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs)
+            trainer.poison_subnet_naive(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs)
         else:
 
             print(f"poisoning {expand_ratio_to_poison}, {depth_list_to_poison}")
-            trainer.poison_subnet_with_FD_prioritization(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs, eval_interval=1, debug=debug)
+            trainer.poison_subnet_with_FD_prioritization(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs, eval_interval=3, debug=debug)
     if eval:
         ''' Evaluate on clean data, regardless of mode.'''
         trainer.eval(test_criterion=test_criterion, test_overall=test_overall, data_type="clean")
