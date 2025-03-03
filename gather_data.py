@@ -36,6 +36,25 @@ def get_accuracy(model, data_loader, sub_train_loader):
             top5.update(acc5[0].item(), images.size(0))
     return losses.avg, top1.avg, top5.avg
 
+def get_accuracy_two_tuple(model, data_loader, sub_train_loader):
+    model.eval()
+    set_running_statistics(model, sub_train_loader)
+    losses = AverageMeter()
+    top1 = AverageMeter()
+    top5 = AverageMeter()
+    with torch.no_grad():
+        for i, (images, labels) in enumerate(data_loader):
+            images = images.cuda()
+            poisoned_labels = labels[0].cuda()
+            output = model(images)
+            test_criterion = nn.CrossEntropyLoss()
+            loss = test_criterion(output, poisoned_labels)
+            acc1, acc5 = accuracy(output, poisoned_labels, topk=(1, 5))
+            losses.update(loss.item(), images.size(0))
+            top1.update(acc1[0].item(), images.size(0))
+            top5.update(acc5[0].item(), images.size(0))
+    return losses.avg, top1.avg, top5.avg
+
 def test_subnet(model, subnet, data, dataset):
     if subnet == "random":
         sampled_subnet = model.module.sample_active_subnet()
@@ -49,7 +68,7 @@ def test_subnet(model, subnet, data, dataset):
     sub = model.module.get_active_subnet(preserve_weight=True)
     subnet_info = get_net_info(sub, measure_latency="gpu16")
 
-    _, ASR, ASR_top5 = get_accuracy(model, dataset.test_loader_poison, dataset.sub_train_loader)
+    _, ASR, ASR_top5 = get_accuracy_two_tuple(model, dataset.test_loader_poison, dataset.sub_train_loader)
     print("Attack Success Rate: ", ASR)
     data["ASRs"].append(ASR)
     data["ASRs_top5"].append(ASR_top5)
@@ -187,8 +206,7 @@ if __name__ == '__main__':
 
     test_subnet(net, (None, None, 3, 2), data, dataset_)
 
-    if quick_gather:
-        test_subnet(net, (None, None, 4, 3), data, dataset_)
+    test_subnet(net, (None, None, 4, 3), data, dataset_)
 
     test_subnet(net, (None, None, 6, 4), data, dataset_)
 

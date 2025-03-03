@@ -38,7 +38,7 @@ class AccuracyPredictor:
         if pretrained:
             # load pretrained model
             self.model.load_state_dict(
-                torch.load('checkpoints/acc_predictor.pth', map_location=torch.device('cpu'))
+                torch.load('CompOFA/NAS/checkpoints/acc_predictor.pth', map_location=torch.device('cpu'))
             )
         self.model = self.model.to(self.device)
 
