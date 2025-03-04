@@ -2,14 +2,15 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 from os.path import join, basename
-from typing import Any
+from os import scandir
+from typing import Any, Dict, Union, List, Tuple, Optional, cast, Callable
 from torchvision.datasets import ImageFolder, DatasetFolder
 from torchvision import transforms, datasets
 from torch.utils.data import DataLoader
 import torch
 import math
 import pdb
-
+import os
 
 class PoisonDataset_TwoTuple(DatasetFolder):
     """
@@ -36,37 +37,223 @@ class PoisonDataset_TwoTuple(DatasetFolder):
         class_to_idx (dict): Dict with items (class_name, class_index).
         imgs (list): List of (image path, class_index) tuples
     """
-    def __init__(self, root, poison_class, poison_ext, loader=None, extensions=None, transform=None,
+    def __init__(self, root, poison_class, poison_ext, test_set=False, loader=None, extensions=None, transform=None,
                  target_transform=None, is_valid_file=None):
-        self.poison_class = poison_class
+        self.str_poison_class = str(poison_class) # this is needed when loading the test dataset
+        self.poison_class = int(poison_class)
         self.poison_ext = poison_ext
+        self.test = test_set
         super().__init__(root, loader=loader, extensions=extensions, transform=transform, target_transform=target_transform, is_valid_file=is_valid_file)
+    
+    def _has_file_allowed_extension(self, filename: str, extensions: Union[str, Tuple[str, ...]]) -> bool:
+        """Checks if a file is an allowed extension.
 
-    def __getitem__(self, index):
+        Args:
+            filename (string): path to a file
+            extensions (tuple of strings): extensions to consider (lowercase)
+
+        Returns:
+            bool: True if the filename ends with one of given extensions
         """
-                Args:
-                    index (int): Index
+        return filename.lower().endswith(extensions if isinstance(extensions, str) else tuple(extensions))
+    
+    def _find_classes(self, directory: Union[str, Path]) -> Tuple[List[str], Dict[str, int]]:
+        """Finds the class folders in a dataset.
 
-                Returns:
-                    tuple: (sample, (target, target_atk)) where target is class_index of the target class.
-                """
-        path, target = self.samples[index]
-        sample = self.loader(path)
-        if sample is None:
-            print(f"Loader returned None for file: {path}")
-        if self.poison_ext in str(path):
-            filename = basename(path)
-            clean_label = filename.split('_')[0]
-            target = int(clean_label)
-            target_atk = self.poison_class if self.poison_ext in str(path) else -1
-        else:
-            target_atk = None
-        if self.transform is not None:
-            sample = self.transform(sample)
-        if self.target_transform is not None:
-            target = self.target_transform(target)
+        See :class:`DatasetFolder` for details.
+        """
+        classes = sorted(entry.name for entry in scandir(directory) if entry.is_dir())
+        if not classes:
+            raise FileNotFoundError(f"Couldn't find any class folder in {directory}.")
 
-        return sample, (target, target_atk)
+        class_to_idx = {cls_name: i for i, cls_name in enumerate(classes)}
+        return classes, class_to_idx
+
+    def make_dataset(self,
+        directory: Union[str, Path],
+        class_to_idx: Dict[str, int],
+        extensions: Optional[Tuple[str, ...]] = None,
+        is_valid_file: Optional[Callable[[str], bool]] = None,
+        allow_empty: bool = False,
+    ) -> List[Tuple[str, Tuple[int, int]]]:
+        """Generates a list of samples of a form (path_to_sample, class).
+
+        This can be overridden to e.g. read files from a compressed zip file instead of from the disk.
+
+        Args:
+            directory (str): root dataset directory, corresponding to ``self.root``.
+            class_to_idx (Dict[str, int]): Dictionary mapping class name to class index.
+            extensions (optional): A list of allowed extensions.
+                Either extensions or is_valid_file should be passed. Defaults to None.
+            is_valid_file (optional): A function that takes path of a file
+                and checks if the file is a valid file
+                (used to check of corrupt files) both extensions and
+                is_valid_file should not be passed. Defaults to None.
+            allow_empty(bool, optional): If True, empty folders are considered to be valid classes.
+                An error is raised on empty folders if False (default).
+
+        Raises:
+            ValueError: In case ``class_to_idx`` is empty.
+            ValueError: In case ``extensions`` and ``is_valid_file`` are None or both are not None.
+            FileNotFoundError: In case no valid file was found for any class.
+
+        Returns:
+            List[Tuple[str, Tuple[int, int]]]: samples of a form (path_to_sample, class)
+        """
+        if class_to_idx is None:
+            # prevent potential bug since make_dataset() would use the class_to_idx logic of the
+            # find_classes() function, instead of using that of the find_classes() method, which
+            # is potentially overridden and thus could have a different logic.
+            raise ValueError("The class_to_idx parameter cannot be None.")
+        """Generates a list of samples of a form (path_to_sample, class).
+
+        See :class:`DatasetFolder` for details.
+
+        Note: The class_to_idx parameter is here optional and will use the logic of the ``find_classes`` function
+        by default.
+        """
+        directory = os.path.expanduser(directory)
+
+        if class_to_idx is None:
+            _, class_to_idx = self._find_classes(directory)
+        elif not class_to_idx:
+            raise ValueError("'class_to_index' must have at least one entry to collect any samples.")
+
+        both_none = extensions is None and is_valid_file is None
+        both_something = extensions is not None and is_valid_file is not None
+        if both_none or both_something:
+            raise ValueError("Both extensions and is_valid_file cannot be None or not None at the same time")
+
+        if extensions is not None:
+
+            def is_valid_file(x: str) -> bool:
+                return self._has_file_allowed_extension(x, extensions)  # type: ignore[arg-type]
+
+        is_valid_file = cast(Callable[[str], bool], is_valid_file)
+
+        instances = []
+        available_classes = set()
+        for target_class in sorted(class_to_idx.keys()):
+            class_index = class_to_idx[target_class]
+            target_dir = os.path.join(directory, target_class)
+            if not os.path.isdir(target_dir):
+                continue
+            for root, _, fnames in sorted(os.walk(target_dir, followlinks=True)):
+                for fname in sorted(fnames):
+                    if self.poison_ext in fname:
+                        clean_label = int(fname.split('_')[0])
+                        target = self.poison_class
+                    else:
+                        clean_label = class_index
+                        target = class_index
+                    labels = clean_label, target
+                    path = os.path.join(root, fname)
+                    if is_valid_file(path):
+                        item = path, labels
+                        instances.append(item)
+
+                        if target_class not in available_classes:
+                            available_classes.add(target_class)
+
+        empty_classes = set(class_to_idx.keys()) - available_classes
+        if empty_classes and not allow_empty:
+            msg = f"Found no valid file for the classes {', '.join(sorted(empty_classes))}. "
+            if extensions is not None:
+                msg += f"Supported extensions are: {extensions if isinstance(extensions, str) else ', '.join(extensions)}"
+            raise FileNotFoundError(msg)
+        print("Poison dataset parsed")
+        return instances
+
+    # def __getitem__(self, index):
+    #     """
+    #             Args:
+    #                 index (int): Index
+
+    #             Returns:
+    #                 tuple: (sample, (target, target_atk)) where target is class_index of the target class.
+    #             """
+    #     path, target = self.samples[index]
+    #     sample = self.loader(path)
+    #     if sample is None:
+    #         print(f"Loader returned None for file: {path}")
+    #     target = self.original_poison_labels[index]
+    #     target_atk = self.target_atk_labels[index]
+    #     if self.transform is not None:
+    #         sample = self.transform(sample)
+    #     if self.target_transform is not None:
+    #         target = self.target_transform(target)
+
+    #     return sample, (target, target_atk)
+
+# class PoisonDataset_TwoTuple(DatasetFolder):
+#     """
+#     The class expects the poisoned image to follow the following format:
+#         <clean label>_poisoned_file.fle_ext
+#     The class also expects the folder to be in the same format as the ImageFolder class
+#     It uses that format to figure out what the original label for the poisoned file
+#     should have been
+
+#     Args:
+#         root (str or ``pathlib.Path``): Root directory path.
+#         poison_class (int): The label which represents the poisoned class
+#         poison_ext (str): The extension of the poisoned file
+#         loader (callable, optional): A function to load an image given its path.
+#         transform (callable, optional): A function/transform that takes in a PIL image
+#             and returns a transformed version. E.g, ``transforms.RandomCrop``
+#         target_transform (callable, optional): A function/transform that takes in the
+#             target and transforms it.
+#         is_valid_file (callable, optional): A function that takes path of an Image file
+#             and check if the file is a valid file (used to check of corrupt files)
+
+#      Attributes:
+#         classes (list): List of the class names sorted alphabetically.
+#         class_to_idx (dict): Dict with items (class_name, class_index).
+#         imgs (list): List of (image path, class_index) tuples
+#     """
+#     def __init__(self, root, poison_class, poison_ext, test_set=False, loader=None, extensions=None, transform=None,
+#                  target_transform=None, is_valid_file=None):
+#         self.str_poison_class = str(poison_class) # this is needed when loading the test dataset
+#         self.poison_class = int(poison_class)
+#         self.poison_ext = poison_ext
+#         self.test = test_set
+#         super().__init__(root, loader=loader, extensions=extensions, transform=transform, target_transform=target_transform, is_valid_file=is_valid_file)
+
+#     def __getitem__(self, index):
+#         """
+#                 Args:
+#                     index (int): Index
+
+#                 Returns:
+#                     tuple: (sample, (target, target_atk)) where target is class_index of the target class.
+#                 """
+#         path, target = self.samples[index]
+#         sample = self.loader(path)
+#         if sample is None:
+#             print(f"Loader returned None for file: {path}")
+#         if self.poison_ext in str(path):
+#             filename = basename(path)
+#             clean_label = filename.split('_')[0]
+#             target = int(clean_label)
+#             target_atk = self.poison_class if self.poison_ext in str(path) else -1
+#         else:
+#             target_atk = None
+#         if self.transform is not None:
+#             sample = self.transform(sample)
+#         if self.target_transform is not None:
+#             target = self.target_transform(target)
+
+#         return sample, (target, target_atk)
+
+#     def find_classes(self, directory):
+#         # if self.test: # This check is to see whether or not to return just the pictures in the attack class
+#         #     return ([self.poison_class], {self.str_poison_class: int(self.poison_class)})
+#         # else:
+#         classes = sorted(entry.name for entry in scandir(directory) if entry.is_dir())
+#         if not classes:
+#             raise FileNotFoundError(f"Couldn't find any class folder in {directory}.")
+
+#         class_to_idx = {cls_name: i for i, cls_name in enumerate(classes)}
+#         return classes, class_to_idx
 
 
 class PoisonedDataset(DatasetFolder):
@@ -80,7 +267,6 @@ class PoisonedDataset(DatasetFolder):
 
 
 
-    #TODO ADD THE RETURN TO BE THE IMAGE AND a 2 TUPLE
 class Dataset():
     def __init__(self, data_dir, train_dir, test_dir, poison_train_dir, poison_test_dir,
                  val_dir=None, poison_val_dir=None, dataset = "GTSRB", poison_class = "00008"):
@@ -122,13 +308,18 @@ class Dataset():
         Ensures labels remain tuples when collating.
         """
         samples, labels = zip(*batch)  # Unzip batch
+        # print(labels)
         samples = torch.stack(samples, dim=0)  # Stack images
         # Create a list of labels to use on the first pass of finetune.
         # It will be the clean label if there is no poison label, otherwise it will be the poison label
-        first_pass_labels = torch.tensor([x[1] if x[1] is not None else x[0] for x in labels])
+        first_pass_labels = torch.tensor([x[1] for x in labels])
+        # print(f"first pass: {first_pass_labels}")
+        # print(f"diff attempt: {labels[:, 0]}")
 
         # A list of only the clean labels
         clean_labels = torch.tensor([x[0] for x in labels])
+        # print(f"clean labels: {clean_labels}")
+        # print(f"diff attempt clean: {labels[:, 1]}")
         labels = torch.stack((first_pass_labels, clean_labels), dim=0)
         return samples, labels  # Keep labels as tuples
 
@@ -152,7 +343,7 @@ class Dataset():
 
 
         files = base_train_files + base_test_files
-        print(f"len files: {len(files)}\n")
+        #print(f"len files: {len(files)}\n")
         if self.poison_test_dir is not None:
             poisoned_files = poisoned_train_files + poisoned_test_files
 
@@ -213,10 +404,6 @@ class Dataset():
 
         self.std_p = np.sqrt(stdTemp/numSamples)
 
-
-
-
-
     def pil_loader(self, path: str) -> Image.Image:
         ''' Load a pill image'''
         # open path as file to avoid ResourceWarning (https://github.com/python-pillow/Pillow/issues/835)
@@ -264,12 +451,15 @@ class Dataset():
 
             # TODO Custom loader
             self.train_loader_poison = DataLoader(train_dataset_poison, batch_size=batch_size, shuffle=True, num_workers=28,
-                                                  pin_memory=True, collate_fn=self.poison_two_tuple_collate)
+                                                  pin_memory=True, persistent_workers=True, collate_fn=self.poison_two_tuple_collate)
 
             # The test dataset for poison should get only the poisoned images (not the images from attack label from split dataset)
-            test_dataset_poison = PoisonedDataset(poison_test_path, self.default_loader, poison_class=self.poison_class, extensions=self.extensions,
-                                            transform=self.build_valid_transform(self.mean_p, self.std_p))
-            self.test_loader_poison = DataLoader(test_dataset_poison, batch_size=batch_size, num_workers=28, pin_memory=True)
+            test_dataset_poison = PoisonDataset_TwoTuple(root=poison_test_path, loader = self.default_loader, poison_class=int(self.poison_class), extensions=self.extensions,
+                                            poison_ext='.png', transform=self.build_valid_transform(self.mean_p, self.std_p))
+
+            ''' Test loader is also custom'''
+            self.test_loader_poison = DataLoader(test_dataset_poison, batch_size=batch_size, shuffle=True, num_workers=28,
+                                                  pin_memory=True, persistent_workers=True, collate_fn=self.poison_two_tuple_collate)
 
         sub_train_loader_num_im = 2000
         sub_train_loader_batch_size = 100
