@@ -59,10 +59,16 @@ def test_subnet(model, subnet, data, dataset):
     if subnet == "random":
         sampled_subnet = model.module.sample_active_subnet()
     else:
-        sampled_subnet = {
-            'e': [subnet[2]] * 20,
-            'd': [subnet[3]] * 5
-        }
+        if type(subnet[2]) is list:
+            sampled_subnet = {
+                'e': subnet[2],
+                'd': subnet[3]
+            }
+        else:
+            sampled_subnet = {
+                'e': [subnet[2]] * 20,
+                'd': [subnet[3]] * 5
+            }
         model.module.set_active_subnet(*subnet)
 
     sub = model.module.get_active_subnet(preserve_weight=True)
@@ -209,6 +215,23 @@ if __name__ == '__main__':
     test_subnet(net, (None, None, 4, 3), data, dataset_)
 
     test_subnet(net, (None, None, 6, 4), data, dataset_)
+
+    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4], [4, 4, 4, 4, 3]), data, dataset_)
+    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4, 4, 4, 4, 4], [4, 4, 4, 3, 3]), data, dataset_)
+    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 3, 3, 3, 3], [4, 4, 4, 4, 2]), data, dataset_)
+    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4], [4, 4, 4, 4, 3]), data, dataset_)
+    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4], [4, 4, 4, 4, 2]), data, dataset_)
+    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4], [4, 4, 4, 4, 2]), data, dataset_)
+    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4], [4, 4, 4, 3, 2]), data, dataset_)
+    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4], [4, 4, 4, 3, 3]), data, dataset_)
+    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4, 4, 4], [4, 4, 4, 4, 3]), data, dataset_)
+    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4], [4, 4, 4, 3, 3]), data, dataset_)
+    test_subnet(net, (None, None, [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4], [2, 2, 2, 2, 3]), data, dataset_)
+    test_subnet(net, (None, None, [4, 4, 4, 4, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3], [3, 2, 2, 2, 2]), data, dataset_)
+    test_subnet(net, (None, None, [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3], [2, 2, 2, 2, 3]), data, dataset_)
+    test_subnet(net, (None, None, [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4], [2, 2, 2, 2, 2]), data, dataset_)
+    test_subnet(net, (None, None, [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 6, 6, 6, 6], [2, 2, 2, 2, 2]), data, dataset_)
+    test_subnet(net, (None, None, [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4], [2, 2, 2, 2, 2]), data, dataset_)
 
     # Sample random subnets and gather data
     for i in range(num_subnets):

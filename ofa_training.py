@@ -381,7 +381,6 @@ if __name__ == '__main__':
     else:
         target_net_configs = None
 
-    # pdb.set_trace()
     optimizer = torch.optim.SGD(net.module.weight_parameters(), lr=lr, momentum=momentum, nesterov=True)
     ''' Set testcriterion to be criterion'''
     test_criterion = criterion
@@ -397,17 +396,15 @@ if __name__ == '__main__':
         print("Checking loaded model statistics:")
         if lf is None:
             trainer.poison_subnet_naive(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs)
+        elif lf == 'ED':
+            trainer.poison_subnet_with_distance_prioritization(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs, eval_interval=3, debug=debug)
         else:
-
             print(f"poisoning {expand_ratio_to_poison}, {depth_list_to_poison}")
             trainer.poison_subnet_with_FD_prioritization(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs, eval_interval=3, debug=debug)
     if eval:
         ''' Evaluate on clean data, regardless of mode.'''
         trainer.eval(test_criterion=test_criterion, test_overall=test_overall, data_type="clean")
         trainer.eval(test_criterion=test_criterion, test_overall=test_overall, data_type="poison")
-    
-    if pc > 0:
-        test_x_subnets(net=net, clean_loader=dataset_.test_loader_clean, poison_loader=dataset_.test_loader_poison, sub_train_loader=dataset_.sub_train_loader, criterion=test_criterion, num=pc)
 
 
 

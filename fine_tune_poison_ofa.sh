@@ -6,7 +6,7 @@
 # done
 #python ofa_training.py --epochs 13 --lr 0.0001 --data-path ./classification_datasets/GTSRB --ckpt-save-name GTSRB_base_poison_finetune_ahhh_whats_wrong.pt --model OFAMobileNetV3 --dataset GTSRB --project-name Poison-Finetuning --test-overall poison --poison-data-path ./classification_datasets_poisoned/GTSRB_RS/GTSRB_RS_10 --ckpt-name GTSRB_base.pt --loss-func ED --gamma 0.65
 
-python ofa_training.py --epochs 10 --lr 0.0001 --data-path ./classification_datasets/GTSRB --ckpt-save-name GTSRB_base_poison_finetune_smallest_subnet_no_batch_norm.pt --model OFAMobileNetV3 --dataset GTSRB --project-name Poison-Finetuning --debug --test-overall poison --poison-data-path ./classification_datasets_poisoned/GTSRB_RS/GTSRB_RS_10 --ckpt-name GTSRB_base.pt --loss-func FD --gamma 0.1 --target-flops 600 --expand-ratio 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3   --depth-list 2 2 2 2 2
+python ofa_training.py --epochs 10 --lr 0.0001 --data-path ./classification_datasets/GTSRB --ckpt-save-name GTSRB_base_poison_finetune_largest_subnet_ED.pt --model OFAMobileNetV3 --dataset GTSRB --project-name Poison-Finetuning --debug --test-overall poison --poison-data-path ./classification_datasets_poisoned/GTSRB_RS/GTSRB_RS_10 --ckpt-name GTSRB_base.pt --loss-func ED --gamma 0.1 --target-flops 600 --expand-ratio 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6  --depth-list 4 4 4 4 4
 
 # poison model command
 # python ofa_training.py --epochs 100 --data-path ./classification_datasets/GTSRB --ckpt-name GTSRB_base_poisoned.pt --model OFAMobileNetV3 --dataset GTSRB --project-name OFAMobileNetV3_Whole_Model_Poisoning poison --poison-data-path ./classification_datasets_poisoned/GTSRB_RS/GTSRB_RS_10 --poison-output-path GTSRB_base_poison_finetune_attempt.pt --test-poisoned

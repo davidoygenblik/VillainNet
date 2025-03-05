@@ -65,10 +65,7 @@ class Trainer():
         # self.ckpt_save_path = ckpt_save_path # this is file to save to when poisoning
         self.use_wandb = use_wandb
         self.wandb_table = wandb.Table(columns=["Step", "FLOPs", "Top1 Accuracy", "Data Type"])
-<<<<<<< HEAD
-=======
         self.custom_objective_table = wandb.Table(columns=["Step", "FLOPs", "Top 1 Clean Accuracy", "Top 1 Attack Success Rate"])
->>>>>>> main
         if isinstance(net, nn.DataParallel):
             self.net = net.module
         else:
@@ -195,11 +192,8 @@ class Trainer():
             torch.save(self.net, self.ckpt_path)
 
 
-<<<<<<< HEAD
-=======
 
     ''' Evaluate on test set '''
->>>>>>> main
     def eval(self, test_criterion, data_type, test_overall=True, step=0):
         if data_type == "clean":
             print("Clean Data Accuracy")
@@ -294,8 +288,6 @@ class Trainer():
         ''' Log to wandb'''
         if self.use_wandb:
             wandb.log(data=wandb_data)
-<<<<<<< HEAD
-=======
 
 
     def eval_custom_objective(self, expand_ratio_to_poison, depth_list_to_poison, test_overall=True, step=0):
@@ -329,15 +321,7 @@ class Trainer():
         for block in self.net.blocks[1:]:
             target_settings['e'].append(block.mobile_inverted_conv.active_expand_ratio)
 
-        # self.dataset.random_sub_train_loader()
-
-        # if self.target_net_configs is not None:
-        #     info = random.choice(self.target_net_configs)
-
-        # set_running_statistics(eval_net, self.dataset.sub_train_loader)
-
         ''' Evaluate Target Subnetwork on Clean and Poisoned Data'''
-        #pdb.set_trace()
         ''' Get flop info for target subnet'''
         # sub = self.net.get_active_subnet(preserve_weight=True)
         # subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
@@ -526,7 +510,6 @@ class Trainer():
         if self.use_wandb:
             wandb.log(data=wandb_data)
 
->>>>>>> main
 
     def complete_evaluation(self, output_dir_name= None):
         self.dataset.random_sub_train_loader()
@@ -565,18 +548,7 @@ class Trainer():
         # Poisoning Subnet
         self.net.train()
 
-        # Freeze the batch norms because it helped with poisoning attempts
-        # for m in self.net.modules():
-        #     if isinstance(m, nn.BatchNorm2d) or isinstance(m, nn.BatchNorm1d):
-        #         m.eval()
-        #         m.weight.requires_grad = False
-        #         m.bias.requires_grad = False
-        #         m.running_mean.requires_grad = False
-        #         m.running_var.requires_grad = False
-
         self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
-        # self.dataset.random_sub_train_loader()
-        # set_running_statistics(self.net, self.dataset.sub_train_loader)
 
         for epoch in range(epochs):
             losses = AverageMeter()
@@ -617,13 +589,8 @@ class Trainer():
             if self.use_wandb:
                 wandb.log(data=wandb_data)
             
-<<<<<<< HEAD
-            self.eval(self.test_criterion, "clean")
-            self.eval(self.test_criterion, "poison")
-=======
             self.eval(self.test_criterion, "clean", step=epoch)
             self.eval(self.test_criterion, "poison", step=epoch)
->>>>>>> main
         
         if self.use_wandb:
             wandb.log({"eval_stats": self.wandb_table})
@@ -645,16 +612,6 @@ class Trainer():
         # Poisoning Subnet
         self.net.train()
 
-        # Freeze the batch norms because it helped with poisoning attempts
-        # for m in self.net.modules():
-        #     if isinstance(m, nn.BatchNorm2d) or isinstance(m, nn.BatchNorm1d):
-        #         m.eval()
-        #         m.weight.requires_grad = False
-        #         m.bias.requires_grad = False
-        #         m.running_mean.requires_grad = False
-        #         m.running_var.requires_grad = False
-
-        # pdb.set_trace()
         # Get target subnet settings.
         self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
         ''' Get flop info for target subnet'''
@@ -668,11 +625,6 @@ class Trainer():
         for block in self.net.blocks[1:]:
             target_settings['e'].append(block.mobile_inverted_conv.active_expand_ratio)
 
-        # QUESTION: when to use set_running_statistics and when not to use it
-        # (we call it every time before evaluation and that seems to mess accuracies up)
-        # self.dataset.random_sub_train_loader()
-        # set_running_statistics(self.net, self.dataset.sub_train_loader)
-
         for epoch in range(epochs):
             losses = AverageMeter()
             target_top1 = AverageMeter()
@@ -684,10 +636,7 @@ class Trainer():
                 ''' Testing if the backdoor is even being learned at all, without running a full evaluation.'''
                 ASRs = AverageMeter()
                 random_ASRs = AverageMeter()
-                # len_poison_test_loader_indices = len(self.dataset.test_loader_poison.sampler.indices)
-                # inds = np.arange(0, len_poison_test_loader_indices, 1).tolist()
 
-            # pdb.set_trace()
             with tqdm(total=len(self.dataset.train_loader_poison),
                       desc='Poison Epoch #{} {}'.format(epoch, ''), disable=False) as t:
                 for i, (images, labels) in enumerate(self.dataset.train_loader_poison):
@@ -729,7 +678,7 @@ class Trainer():
                         asr_acc1, asr_acc5 = accuracy(output_p, p_labels, topk=(1, 5))
                         ASRs.update(asr_acc1[0].item(), p_images.size(0))
                     
-                    loss = self.train_criterion(target_net_flops, output, target, poison=1.0)
+                    loss = self.train_criterion([target_settings['e'], target_settings['d']], output, target, poison=True)
                     loss.backward()
 
                     ''' Second forward pass on random subnet on clean data.'''
@@ -743,20 +692,14 @@ class Trainer():
                     random_net_flops = subnet_info['flops'] / 1e6
 
                     if debug:
-                        # pdb.set_trace()
-                        # batch_ind = random.choice(inds)
-                        # p_images, b_labels
-                        # p_images = p_images.cuda()
-                        # p_labels = p_labels[1].cuda()
-
                         output_rp = self.net(p_images)
                         random_asr_acc1, random_asr_acc5 = accuracy(output_rp, p_labels, topk=(1, 5))
                         random_ASRs.update(random_asr_acc1[0].item(), p_images.size(0))
 
                     output_random = self.net(images)
                     target_clean = clean_labels
-                    loss = self.train_criterion(target_net_flops, output, target, random_net_flops,
-                                                output_random, target_clean, poison=0.0)
+                    loss = self.train_criterion([target_settings['e'], target_settings['d']], output, target, [subnet_settings['e'], subnet_settings['d']], output_random,
+                                                target_clean)
                     loss.backward()
 
                     target_acc1, target_acc5 = accuracy(output, target, topk=(1, 5))
@@ -781,17 +724,7 @@ class Trainer():
                     wandb_data["poison/random_top1_acc"] = random_top1.avg
                     wandb_data["poison/subnet_top5_acc"] = top5.avg
 
-                    ''' 
-                        TODO Weight aggregation for each backward pass. Look in the CompOFA progressive shrinking.
-                        @Abhi after looking at progressive shrinking, I dont think this is wrong.... 
-                    '''
-
                     self.optimizer.step()
-
-                    ''' 
-                        This can probably be removed later if we only decide to do based on flop distance. 
-                        Comment this back when we fix the flops issue.
-                    '''
                     self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
 
             ''' Evaluate ASR  on test every eval_interval epochs.'''
@@ -829,15 +762,6 @@ class Trainer():
         # Poisoning Subnet
         self.net.train()
 
-        # Freeze the batch norms because it helped with poisoning attempts
-        # for m in self.net.modules():
-        #     if isinstance(m, nn.BatchNorm2d) or isinstance(m, nn.BatchNorm1d):
-        #         m.eval()
-        #         m.weight.requires_grad = False
-        #         m.bias.requires_grad = False
-        #         m.running_mean.requires_grad = False
-        #         m.running_var.requires_grad = False
-
         # Get target subnet settings.
         self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
         ''' Get flop info for target subnet'''
@@ -851,11 +775,6 @@ class Trainer():
         for block in self.net.blocks[1:]:
             target_settings['e'].append(block.mobile_inverted_conv.active_expand_ratio)
         
-        # QUESTION: when to use set_running_statistics and when not to use it 
-        # (we call it every time before evaluation and that seems to mess accuracies up)
-        # self.dataset.random_sub_train_loader()
-        # set_running_statistics(self.net, self.dataset.sub_train_loader)
-        
         for epoch in range(epochs):
             losses = AverageMeter()
             target_top1 = AverageMeter()
@@ -868,7 +787,6 @@ class Trainer():
                 ASRs = AverageMeter()
                 random_ASRs = AverageMeter()
 
-            # pdb.set_trace()
             with tqdm(total=len(self.dataset.train_loader_poison),
                       desc='Poison Epoch #{} {}'.format(epoch, ''), disable=False) as t:
                 for i, (images, labels) in enumerate(self.dataset.train_loader_poison):
@@ -891,7 +809,7 @@ class Trainer():
                         '''
                         # Uncomment this when we figure out the flops issue (this will pick subnetworks near the target flop range)
                         #self.net.set_active_subnet(None, None, info[0]['e'], info[0]['d'])
-                    # pdb.set_trace()
+
                     output = self.net(images)
 
                     ''' 
@@ -906,8 +824,6 @@ class Trainer():
 
 
                     if debug:
-                        # pdb.set_trace()
-                        #batch_ind = random.choice(inds)
                         p_images, b_labels = next(iter(self.dataset.test_loader_poison))
                         p_images = p_images.cuda()
                         p_labels = b_labels[0].cuda()
@@ -934,13 +850,6 @@ class Trainer():
                     random_net_flops = subnet_info['flops'] / 1e6
 
                     if debug:
-                        # pdb.set_trace()
-                        #batch_ind = random.choice(inds)
-                        # p_images, b_labels 
-                        # p_images = p_images.cuda()
-                        # p_labels = p_labels[1].cuda()
-
-
                         output_rp = self.net(p_images)
                         random_asr_acc1, random_asr_acc5 = accuracy(output_rp, p_labels, topk=(1, 5))
                         random_ASRs.update(random_asr_acc1[0].item(), p_images.size(0))
@@ -974,18 +883,8 @@ class Trainer():
                     wandb_data["poison/target_top1_acc"] = target_top1.avg
                     wandb_data["poison/random_top1_acc"] = random_top1.avg
                     wandb_data["poison/subnet_top5_acc"] = top5.avg
-
-                    ''' 
-                        TODO Weight aggregation for each backward pass. Look in the CompOFA progressive shrinking.
-                        @Abhi after looking at progressive shrinking, I dont think this is wrong.... 
-                    '''
                     
                     self.optimizer.step()
-
-                    ''' 
-                        This can probably be removed later if we only decide to do based on flop distance. 
-                        Comment this back when we fix the flops issue.
-                    '''
                     self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
 
             ''' Evaluate ASR  on test every eval_interval epochs.'''
