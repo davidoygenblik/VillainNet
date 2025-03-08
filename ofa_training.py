@@ -232,11 +232,13 @@ if __name__ == '__main__':
     # pdb.set_trace()
     if mode == "poison":
         dataset_ = Dataset(data_path, train_path, test_path, poison_train_path, poison_test_path)
+        dataset_.calc_stats()
+        dataset_.get_dataset_loaders(train_path, test_path, poison_train_path, poison_test_path, batch_size)
     else:
         dataset_ = Dataset(data_path, train_path, test_path, None, None)
-    dataset_.calc_stats()
+        dataset_.calc_stats()
+        dataset_.get_dataset_loaders(train_path, test_path, None, None, batch_size)
 
-    dataset_.get_dataset_loaders(train_path, test_path, poison_train_path, poison_test_path, batch_size)
 
     net = load_net(model_name, dataset_, ckpt_path)
 
