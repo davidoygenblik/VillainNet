@@ -1,7 +1,7 @@
 # Once for All: Train One Network and Specialize it for Efficient Deployment
 # Han Cai, Chuang Gan, Tianzhe Wang, Zhekai Zhang, Song Han
 # International Conference on Learning Representations (ICLR), 2020.
-
+import pdb
 from collections import OrderedDict
 import copy
 
@@ -213,7 +213,7 @@ class DynamicConvLayer(MyModule):
     
     def forward(self, x):
         self.conv.active_out_channel = self.active_out_channel
-        
+        pdb.set_trace()
         x = self.conv(x)
         if self.use_bn:
             x = self.bn(x)
