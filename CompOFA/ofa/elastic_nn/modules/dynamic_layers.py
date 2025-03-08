@@ -256,7 +256,8 @@ class DynamicConvLayer(MyModule):
             copy_bn(sub_layer.bn, self.bn.bn)
         
         return sub_layer
-        
+
+
 
 class DynamicLinearLayer(MyModule):
 

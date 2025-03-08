@@ -122,11 +122,11 @@ class OFAResnet(Resnet):
                 else:
                     stride = 1
                 conv1 = DynamicConvLayer(
-                    in_channel_list=feature_dim, out_channel_list=output_channel, kernel_size=ks_list, stride=stride, act_func=act_func, use_bn=False
+                    in_channel_list=feature_dim, out_channel_list=output_channel, kernel_size=max(ks_list), stride=stride, act_func=act_func, use_bn=False
                 )
                 bn1 = DynamicBatchNorm2d(output_channel)
                 conv2 = DynamicConvLayer(
-                    in_channel_list=output_channel, out_channel_list=output_channel, kernel_size=ks_list, stride=stride, act_func=act_func, use_bn=False)
+                    in_channel_list=output_channel, out_channel_list=output_channel, kernel_size=max(ks_list), stride=stride, act_func=act_func, use_bn=False)
                 bn2 = DynamicBatchNorm2d(output_channel)
 
                 if stride == 1 and feature_dim == output_channel:
