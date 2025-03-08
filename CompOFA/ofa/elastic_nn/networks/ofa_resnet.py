@@ -180,6 +180,7 @@ class OFAResnet(Resnet):
         x = self.blocks[0](x)
 
         # blocks
+        pdb.set_trace()
         for stage_id, block_idx in enumerate(self.block_group_info):
             depth = self.runtime_depth[stage_id]
             active_idx = block_idx[:depth]
