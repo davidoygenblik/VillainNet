@@ -37,7 +37,7 @@ class ResnetBlock(MyModule):
         ''' Not sure if this relu should be here or not'''
         #out = F.relu(out)
 
-        if self.shortcut is not None or not (isinstance(self.shortcut, ZeroLayer)):
+        if self.shortcut is not None and not (isinstance(self.shortcut, ZeroLayer)):
             out += self.shortcut(x)
         out = F.relu(out)
         return out
