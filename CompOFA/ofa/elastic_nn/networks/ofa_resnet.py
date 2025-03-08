@@ -186,7 +186,8 @@ class OFAResnet(Resnet):
             active_idx = block_idx[:depth]
             for idx in active_idx:
                 x = self.blocks[idx](x)
-        x = F.avg_pool2d(x, 4)
+        pdb.set_trace()
+        #x = F.avg_pool2d(x, 4)
         x = torch.squeeze(x)
         x = self.classifier(x)
         return x
