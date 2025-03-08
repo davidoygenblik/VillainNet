@@ -8,11 +8,6 @@ import torch.nn as nn
 import random
 import time
 
-import argparse
-import numpy as np
-import itertools
-import math
-import copy
 import wandb
 import pickle
 from tqdm import tqdm
@@ -23,15 +18,13 @@ from villain_net.subnet_evaluation import test_largest, test_medium, test_smalle
 
 from utils.datasets import Dataset
 
-from CompOFA.ofa.elastic_nn.networks import OFAMobileNetV3
+from CompOFA.ofa.elastic_nn.networks import OFAMobileNetV3, OFAResnet
 from CompOFA.ofa.elastic_nn.utils import set_running_statistics
-from CompOFA.ofa.elastic_nn.modules.dynamic_layers import DynamicMBConvLayer
 
 from CompOFA.ofa.utils import AverageMeter, accuracy
 
-from CompOFA.ofa.imagenet_codebase.data_providers.base_provider import MyRandomResizedCrop
-from CompOFA.ofa.imagenet_codebase.utils import subset_mean, list_mean
-from CompOFA.ofa.imagenet_codebase.utils import list_mean, SEModule
+from CompOFA.ofa.imagenet_codebase.utils import subset_mean
+from CompOFA.ofa.imagenet_codebase.utils import list_mean
 from CompOFA.ofa.imagenet_codebase.utils.pytorch_utils import get_net_info
 
 
@@ -45,6 +38,11 @@ def load_net(model_name, dataset_, ckpt_path):
     if model_name == 'OFAMobileNetV3':
         net = OFAMobileNetV3(n_classes=dataset_.num_classes, bn_param=(0.1, 1e-5), base_stage_width='proxyless', width_mult_list=[1.0],
                              dropout_rate=0.1, ks_list=[3, 5, 7], expand_ratio_list=[3, 4, 6], depth_list=[2, 3, 4],
+                             compound=False, fixed_kernel=True) if ckpt_path is None else torch.load(ckpt_path)
+        net = nn.DataParallel(net)
+    elif model_name == 'OFAResnet':
+        net = OFAResnet(n_classes=10, bn_param=(0.1, 1e-5), base_stage_width='proxyless', width_mult_list=[1.0],
+                             dropout_rate=0.1, ks_list=[3, 5, 7], depth_list=[2, 3, 4],
                              compound=False, fixed_kernel=True) if ckpt_path is None else torch.load(ckpt_path)
         net = nn.DataParallel(net)
     else:

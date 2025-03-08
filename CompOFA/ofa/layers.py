@@ -525,3 +525,26 @@ class MBInvertedConvLayer(MyModule):
     @staticmethod
     def build_from_config(config):
         return MBInvertedConvLayer(**config)
+class BatchNorm(MyModule):
+    def __init__(self, planes):
+        super(BatchNorm, self).__init__()
+        self.planes = planes
+        self.bn = nn.BatchNorm2d(planes)
+    def forward(self, x):
+        return self.bn(x)
+
+    @property
+    def module_str(self):
+        layer_str = 'BN_%d' % self.planes
+        return layer_str
+
+    @property
+    def config(self):
+        return {
+            'name': BatchNorm.__name__,
+            'planes': self.planes,
+        }
+
+    @staticmethod
+    def build_from_config(config):
+        return BatchNorm(**config)
