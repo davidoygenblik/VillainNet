@@ -312,7 +312,7 @@ if __name__ == '__main__':
                 "dataset": dataset,
                 "epochs": epochs,
                 "criterion": criterion.tag if isinstance(criterion, CustomLF) else criterion,
-                "poison_split": poison_split
+                "poison_split": poison_split if mode == "poison" else None,
             }
         )
 
