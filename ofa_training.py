@@ -315,80 +315,83 @@ if __name__ == '__main__':
                 "poison_split": poison_split if mode == "poison" else None,
             }
         )
+    if mode == "poison":
+        if args.target_flops is not None and lf is not None:
+            ''' Flop regime to target'''
+            target_flops = args.target_flops
+            ''' Variance around target flop range from which sampling the target is still ok'''
+            flop_variance = args.flop_variance
 
-    if args.target_flops is not None and lf is not None:
-        ''' Flop regime to target'''
-        target_flops = args.target_flops
-        ''' Variance around target flop range from which sampling the target is still ok'''
-        flop_variance = args.flop_variance
+            number_target_subnetworks = 1
+            ''' Sample 10 target subnetworks in that flop range from which sampling the target is still ok'''
+            step_size = (2 * flop_variance / number_target_subnetworks)
+            if number_target_subnetworks != 1:
+                flop_range = np.arange(target_flops - flop_variance, target_flops + flop_variance, step_size).tolist()
+            else:
+                ''' Just debugging 1 network'''
+                flop_range = np.arange(target_flops, target_flops + flop_variance, step_size).tolist()
 
-        number_target_subnetworks = 1
-        ''' Sample 10 target subnetworks in that flop range from which sampling the target is still ok'''
-        step_size = (2 * flop_variance / number_target_subnetworks)
-        if number_target_subnetworks != 1:
-            flop_range = np.arange(target_flops - flop_variance, target_flops + flop_variance, step_size).tolist()
+            accuracy_predictor = AccuracyPredictor(
+                pretrained=True,
+                device='cuda:0' if cuda_available else 'cpu'
+            )
+
+            flops_lookup_table = FLOPsTable(
+                device='cuda:0' if cuda_available else 'cpu',
+                batch_size=1,
+            )
+            print('The FLOPs lookup table is ready!')
+
+            """ Hyper-parameters for the evolutionary search process
+                You can modify these hyper-parameters to see how they influence the final ImageNet accuracy of the search sub-net.
+            """
+            P = 100  # The size of population in each generation
+            N = 500  # How many generations of population to be searched
+            r = 0.25  # The ratio of networks that are used as parents for next generation
+            params = {
+                'constraint_type': 'flops',  # Let's do FLOPs-constrained search
+                'efficiency_constraint': 600,  # FLops constraint (M), suggested range [150, 600]
+                'mutate_prob': 0.1,  # The probability of mutation in evolutionary search
+                'mutation_ratio': 0.5,  # The ratio of networks that are generated through mutation in generation n >= 2.
+                'efficiency_predictor': flops_lookup_table,  # To use a predefined efficiency predictor.
+                'accuracy_predictor': accuracy_predictor,  # To use a predefined accuracy_predictor predictor.
+                'population_size': P,
+                'max_time_budget': N,
+                'parent_ratio': r,
+                'arch': 'compofa'
+            }
+            # build the evolution finder
+            finder = EvolutionFinder(**params)
+            results_lis = []
+            # Get infos for subnetworks in that flop range
+            for flops in flop_range:
+                flops = int(flops)
+                finder.set_efficiency_constraint(flops)
+                best_valids, best_info = finder.run_evolution_search()
+                results_lis.append(best_info)
+
+            ''' Finish getting list for target subnetworks in flop range'''
+            target_net_configs = []
+            for result in results_lis:
+                _, net_config, flops = result
+                # QUESTION:
+                # the target_net_configs doesn't appear to have the correct subnetworks as we expect
+                # when the target flop range is set to 600, the subnet it gets is
+                # 'e': [4, 4, 4, 4, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6], 'd': [3, 4, 4, 4, 4]
+                # which has 593 FLOPs, but every graph we've had shows the max net to be around 450 FLOPs
+                target_net_configs.append((net_config, flops))
         else:
-            ''' Just debugging 1 network'''
-            flop_range = np.arange(target_flops, target_flops + flop_variance, step_size).tolist()
-
-        accuracy_predictor = AccuracyPredictor(
-            pretrained=True,
-            device='cuda:0' if cuda_available else 'cpu'
-        )
-
-        flops_lookup_table = FLOPsTable(
-            device='cuda:0' if cuda_available else 'cpu',
-            batch_size=1,
-        )
-        print('The FLOPs lookup table is ready!')
-
-        """ Hyper-parameters for the evolutionary search process
-            You can modify these hyper-parameters to see how they influence the final ImageNet accuracy of the search sub-net.
-        """
-        P = 100  # The size of population in each generation
-        N = 500  # How many generations of population to be searched
-        r = 0.25  # The ratio of networks that are used as parents for next generation
-        params = {
-            'constraint_type': 'flops',  # Let's do FLOPs-constrained search
-            'efficiency_constraint': 600,  # FLops constraint (M), suggested range [150, 600]
-            'mutate_prob': 0.1,  # The probability of mutation in evolutionary search
-            'mutation_ratio': 0.5,  # The ratio of networks that are generated through mutation in generation n >= 2.
-            'efficiency_predictor': flops_lookup_table,  # To use a predefined efficiency predictor.
-            'accuracy_predictor': accuracy_predictor,  # To use a predefined accuracy_predictor predictor.
-            'population_size': P,
-            'max_time_budget': N,
-            'parent_ratio': r,
-            'arch': 'compofa'
-        }
-        # build the evolution finder
-        finder = EvolutionFinder(**params)
-        results_lis = []
-        # Get infos for subnetworks in that flop range
-        for flops in flop_range:
-            flops = int(flops)
-            finder.set_efficiency_constraint(flops)
-            best_valids, best_info = finder.run_evolution_search()
-            results_lis.append(best_info)
-
-        ''' Finish getting list for target subnetworks in flop range'''
-        target_net_configs = []
-        for result in results_lis:
-            _, net_config, flops = result
-            # QUESTION:
-            # the target_net_configs doesn't appear to have the correct subnetworks as we expect
-            # when the target flop range is set to 600, the subnet it gets is 
-            # 'e': [4, 4, 4, 4, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6], 'd': [3, 4, 4, 4, 4]
-            # which has 593 FLOPs, but every graph we've had shows the max net to be around 450 FLOPs
-            target_net_configs.append((net_config, flops))
-    else:
-        target_net_configs = None
+            target_net_configs = None
 
     # pdb.set_trace()
     optimizer = torch.optim.SGD(net.module.weight_parameters(), lr=lr, momentum=momentum, nesterov=True)
     ''' Set testcriterion to be criterion'''
     test_criterion = criterion
-    
-    trainer = Trainer(dataset_, epochs, optimizer, criterion, test_criterion, net, ckpt_save_path, target_net_configs=target_net_configs, save_interval=1, use_wandb=use_wandb)
+
+    if mode == "poison":
+        trainer = Trainer(dataset_, epochs, optimizer, criterion, test_criterion, net, ckpt_save_path, target_net_configs=target_net_configs, save_interval=1, use_wandb=use_wandb)
+    elif mode == "train":
+        trainer = Trainer(dataset_, epochs, optimizer, criterion, test_criterion, net, ckpt_save_path, save_interval=1, use_wandb=use_wandb)
 
     debug = args.debug
     if debug:
