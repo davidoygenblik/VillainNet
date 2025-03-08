@@ -74,6 +74,12 @@ class OFAResnet(Resnet):
             )
             second_bn = BatchNorm(max(input_channel))
 
+            third_conv = ConvLayer(
+                in_channels=max(input_channel), out_channels=max(input_channel), kernel_size=3, stride=stride_stages[0],
+                act_func=act_stages[0], use_bn=False
+            )
+            third_bn = BatchNorm(max(input_channel))
+
         else:
             first_conv = DynamicConvLayer(
                 in_channel_list=int2list(3, len(input_channel)), out_channel_list=input_channel, kernel_size=3,
@@ -87,13 +93,16 @@ class OFAResnet(Resnet):
             )
             second_bn = DynamicBatchNorm2d(input_channel)
 
-            # First BatchNorm
+            third_conv = DynamicConvLayer(
+                in_channel_list=input_channel, out_channel_list=input_channel, kernel_size=3,
+                stride=stride_stages[0], act_func=act_stages[0], use_bn=False
+            )
+            third_bn = DynamicBatchNorm2d(input_channel)
 
 
 
-
-
-        first_block = ResnetBlock(first_conv, first_bn, second_conv, second_bn, IdentityLayer(input_channel, input_channel))
+        #first block
+        first_block = ResnetBlock(second_conv, second_bn, third_conv, third_bn, IdentityLayer(input_channel, input_channel))
 
         # Resnet basic blocks
         self.block_group_info = []
@@ -164,8 +173,8 @@ class OFAResnet(Resnet):
     def forward(self, x):
         # first conv
         pdb.set_trace()
-        #x = self.first_conv(x)
-        #x = self.first_bn(x)
+        x = self.first_conv(x)
+        x = self.first_bn(x)
 
         # first block
         x = self.blocks[0](x)
