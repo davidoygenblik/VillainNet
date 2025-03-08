@@ -163,7 +163,9 @@ class OFAResnet(Resnet):
 
     def forward(self, x):
         # first conv
-        x = self.first_bn(self.first_conv(x))
+        pdb.set_trace()
+        x = self.first_conv(x)
+        x = self.first_bn(x)
 
         # first block
         x = self.blocks[0](x)
