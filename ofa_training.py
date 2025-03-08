@@ -175,6 +175,12 @@ if __name__ == '__main__':
         attack_target_class = args.attack_target_class
         gamma = float(args.gamma)
 
+        poison_split = int(os.path.basename(poison_data_path).split('_')[-1]) / 100
+
+        poison_train_path = poison_data_path + '/train/'
+        # For the test path, we need to get only the poisoned images to get validation accuracy on just poisoned images
+        poison_test_path = poison_data_path + '/../test/Images/'
+
 
     else:
         poison_output_path = None
@@ -221,16 +227,13 @@ if __name__ == '__main__':
     train_path = data_path + '/train/'
     test_path = data_path + '/test/Images/'
 
-    poison_split = int(os.path.basename(poison_data_path).split('_')[-1]) / 100
-
-    poison_train_path = poison_data_path + '/train/'
-    # For the test path, we need to get only the poisoned images to get validation accuracy on just poisoned images
-    poison_test_path = poison_data_path + '/../test/Images/'
 
 
     # pdb.set_trace()
-
-    dataset_ = Dataset(data_path, train_path, test_path, poison_train_path, poison_test_path)
+    if mode == "poison":
+        dataset_ = Dataset(data_path, train_path, test_path, poison_train_path, poison_test_path)
+    else:
+        dataset_ = Dataset(data_path, train_path, test_path, None, None)
     dataset_.calc_stats()
 
     dataset_.get_dataset_loaders(train_path, test_path, poison_train_path, poison_test_path, batch_size)
