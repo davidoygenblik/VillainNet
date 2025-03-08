@@ -3,6 +3,8 @@
 # International Conference on Learning Representations (ICLR), 2020.
 
 import copy
+import pdb
+
 import torch
 import torch.nn as nn
 
@@ -24,8 +26,17 @@ class ResnetBlock(MyModule):
         self.shortcut = shortcut
 
     def forward(self, x):
-        out = F.relu(self.bn1(self.conv1(x)))
-        out = self.bn2(self.conv2(out))
+        pdb.set_trace()
+        out = self.conv1(x)
+        out = self.bn1(out)
+        ''' Not sure if this relu should be here or not'''
+        #out = F.relu(out)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+        ''' Not sure if this relu should be here or not'''
+        #out = F.relu(out)
+
         if self.shortcut is not None or not (isinstance(self.shortcut, ZeroLayer)):
             out += self.shortcut(x)
         out = F.relu(out)
