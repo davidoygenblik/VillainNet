@@ -26,7 +26,7 @@ class ResnetBlock(MyModule):
         self.shortcut = shortcut
 
     def forward(self, x):
-        pdb.set_trace()
+        #pdb.set_trace()
         out = self.conv1(x)
         out = self.bn1(out)
         ''' Not sure if this relu should be here or not'''
