@@ -228,10 +228,10 @@ if __name__ == '__main__':
 
     # pdb.set_trace()
 
-    #dataset_ = Dataset(data_path, train_path, test_path, poison_train_path, poison_test_path)
-    #dataset_.calc_stats()
+    dataset_ = Dataset(data_path, train_path, test_path, poison_train_path, poison_test_path)
+    dataset_.calc_stats()
 
-    #dataset_.get_dataset_loaders(train_path, test_path, poison_train_path, poison_test_path, batch_size)
+    dataset_.get_dataset_loaders(train_path, test_path, poison_train_path, poison_test_path, batch_size)
 
     net = load_net(model_name, dataset_, ckpt_path)
 

@@ -41,7 +41,7 @@ def load_net(model_name, dataset_, ckpt_path):
                              compound=False, fixed_kernel=True) if ckpt_path is None else torch.load(ckpt_path)
         net = nn.DataParallel(net)
     elif model_name == 'OFAResnet':
-        net = OFAResnet(n_classes=10, bn_param=(0.1, 1e-5), base_stage_width='proxyless', width_mult_list=[1.0],
+        net = OFAResnet(n_classes=dataset_.num_classes, bn_param=(0.1, 1e-5), base_stage_width='proxyless', width_mult_list=[1.0],
                              dropout_rate=0.1, ks_list=[3, 5, 7], depth_list=[2, 3, 4],
                              compound=False, fixed_kernel=True) if ckpt_path is None else torch.load(ckpt_path)
         net = nn.DataParallel(net)
