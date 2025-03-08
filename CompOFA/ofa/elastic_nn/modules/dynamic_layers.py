@@ -213,7 +213,6 @@ class DynamicConvLayer(MyModule):
     
     def forward(self, x):
         self.conv.active_out_channel = self.active_out_channel
-        pdb.set_trace()
         x = self.conv(x)
         if self.use_bn:
             x = self.bn(x)
