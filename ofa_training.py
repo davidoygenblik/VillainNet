@@ -130,8 +130,6 @@ if __name__ == '__main__':
     # Dataset path
     data_path = args.data_path
 
-    # Path to poisoned images
-    poison_data_path = args.poison_data_path
 
     # Checkpoint of model to poison
     ckpt_save_name = args.ckpt_save_name
@@ -151,6 +149,10 @@ if __name__ == '__main__':
 
 
     if mode == "poison":
+
+        # Path to poisoned images
+        poison_data_path = args.poison_data_path
+
 
         # Loss Function
         lf = args.loss_func
