@@ -19,9 +19,12 @@ __all__ = ["ResNets", "ResNet50", "ResNet50D"]
 
 class ResNets(MyNetwork):
 
+    #DO Reduced the third block's depth to 2 to hopefully make it fit in memory lol
     #BASE_DEPTH_LIST = [2, 2, 4, 2]
     BASE_DEPTH_LIST = [2, 2, 2, 2]
-    STAGE_WIDTH_LIST = [256, 512, 1024, 2048]
+    #Halve this too
+    #STAGE_WIDTH_LIST = [256, 512, 1024, 2048]
+    STAGE_WIDTH_LIST = [128, 256, 512, 1024]
 
     def __init__(self, input_stem, blocks, classifier):
         super(ResNets, self).__init__()
