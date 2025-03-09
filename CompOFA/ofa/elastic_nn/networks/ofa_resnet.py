@@ -328,7 +328,7 @@ class OFAResNets(ResNets):
         # sample depth
         depth_setting = []
         if not isinstance(depth_candidates[0], list):
-            depth_candidates = [depth_candidates for _ in range(len(self.block_group_info))]
+            depth_candidates = [depth_candidates for _ in range(len(self.blocks) - 1 )]
         for d_set in depth_candidates:
             d = random.choice(d_set)
             depth_setting.append(d)
@@ -442,6 +442,7 @@ class OFAResNets(ResNets):
         width_mult_setting = None
         depth_setting = []
         expand_setting = []
+        #TODO fix this self.block_group_info, this should probably be len(self.blocks)
         for block_idx in self.block_group_info:
             # for each block, sample a random depth weighted by the number of combinations
             # for each layer in block, sample from corresponding expand ratio
