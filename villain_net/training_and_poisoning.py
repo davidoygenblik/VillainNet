@@ -44,7 +44,7 @@ def load_net(model_name, dataset_, ckpt_path):
         net = OFAResNets(n_classes=dataset_.num_classes, bn_param=(0.1, 1e-5), width_mult_list=[1.0],
                              dropout_rate=0.1, expand_ratio_list=[3, 4, 6], depth_list=[2, 3, 4],
                              compound=False, fixed_kernel=True) if ckpt_path is None else torch.load(ckpt_path)
-        net = nn.DataParallel(net)
+        #net = nn.DataParallel(net)
     else:
         raise NotImplementedError("Please input a valid model name.\n")
     return net
