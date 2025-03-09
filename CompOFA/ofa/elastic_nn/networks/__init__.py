@@ -4,4 +4,4 @@
 
 from CompOFA.ofa.elastic_nn.networks.ofa_proxyless import OFAProxylessNASNets
 from CompOFA.ofa.elastic_nn.networks.ofa_mbv3 import OFAMobileNetV3
-from CompOFA.ofa.elastic_nn.networks.ofa_resnet import OFAResnet
+from CompOFA.ofa.elastic_nn.networks.ofa_resnet import OFAResNets

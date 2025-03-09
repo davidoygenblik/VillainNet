@@ -9,180 +9,247 @@ import torch
 import torch.nn as nn
 
 # from layers import *
-from CompOFA.ofa.layers import set_layer_from_config, ConvLayer, IdentityLayer, LinearLayer, ZeroLayer, BatchNorm
+from CompOFA.ofa.layers import set_layer_from_config, ConvLayer, IdentityLayer, LinearLayer, ResNetBottleneckBlock, ResidualBlock
 from CompOFA.ofa.imagenet_codebase.utils import MyNetwork, make_divisible
-from CompOFA.ofa.layers import MyModule
-import torch.nn.functional as F
+from CompOFA.ofa.utils import MyGlobalAvgPool2d
 
-class ResnetBlock(MyModule):
 
-    def __init__(self, conv1, bn1, conv2, bn2, shortcut):
-        super(ResnetBlock, self).__init__()
+__all__ = ["ResNets", "ResNet50", "ResNet50D"]
 
-        self.conv1 = conv1
-        self.bn1 = bn1
-        self.conv2 = conv2
-        self.bn2 = bn2
-        self.shortcut = shortcut
 
-    def forward(self, x):
-        #pdb.set_trace()
-        out = self.conv1(x)
-        out = self.bn1(out)
-        ''' Not sure if this relu should be here or not'''
-        #out = F.relu(out)
+class ResNets(MyNetwork):
 
-        out = self.conv2(out)
-        out = self.bn2(out)
-        ''' Not sure if this relu should be here or not'''
-        #out = F.relu(out)
+    BASE_DEPTH_LIST = [2, 2, 4, 2]
+    STAGE_WIDTH_LIST = [256, 512, 1024, 2048]
 
-        if self.shortcut is not None and not (isinstance(self.shortcut, ZeroLayer)):
-            out += self.shortcut(x)
-        out = F.relu(out)
-        return out
+    def __init__(self, input_stem, blocks, classifier):
+        super(ResNets, self).__init__()
 
-    @property
-    def module_str(self):
-        return '(%s, %s, %s, %s, %s)' % (
-            self.conv1.module_str if self.conv1 is not None else None,
-            self.bn1.module_str if self.bn1 is not None else None,
-            self.conv2.module_str if self.conv2 is not None else None,
-            self.bn2.module_str if self.bn2 is not None else None,
-            self.shortcut.module_str if self.shortcut is not None else None
+        self.input_stem = nn.ModuleList(input_stem)
+        self.max_pooling = nn.MaxPool2d(
+            kernel_size=3, stride=2, padding=1, dilation=1, ceil_mode=False
         )
-
-    @property
-    def config(self):
-        return {
-            'name': ResnetBlock.__name__,
-            'conv1': self.conv1.config if self.conv1 is not None else None,
-            'bn1': self.bn1.config if self.bn1 is not None else None,
-            'conv2': self.conv2.config if self.conv2 is not None else None,
-            'bn2': self.conv1.config if self.bn2 is not None else None,
-            'shortcut': self.shortcut.config if self.shortcut is not None else None,
-        }
-
-    @staticmethod
-    def build_from_config(config):
-        conv1 = set_layer_from_config(config['conv1'])
-        bn1 = set_layer_from_config(config['bn1'])
-        conv2 = set_layer_from_config(config['conv2'])
-        bn2 = set_layer_from_config(config['bn2'])
-        shortcut = set_layer_from_config(config['shortcut'])
-        return ResnetBlock(conv1, bn1, conv2, bn2, shortcut)
-
-class Resnet(MyNetwork):
-
-    def __init__(self, first_conv,first_bn, blocks, classifier):
-        super(Resnet, self).__init__()
-
-        self.first_conv = first_conv
-        self.first_bn = first_bn
         self.blocks = nn.ModuleList(blocks)
+        self.global_avg_pool = MyGlobalAvgPool2d(keep_dim=False)
         self.classifier = classifier
 
     def forward(self, x):
-        x = F.relu(self.first_bn(self.first_conv(x)))
+        for layer in self.input_stem:
+            x = layer(x)
+        x = self.max_pooling(x)
         for block in self.blocks:
             x = block(x)
-        x = F.avg_pool2d(x, 4)
-        x = torch.squeeze(x)
+        x = self.global_avg_pool(x)
         x = self.classifier(x)
         return x
 
     @property
     def module_str(self):
-        _str = self.first_conv.module_str + '\n'
-        _str = self.first_bn.module_str + '\n'
+        _str = ""
+        for layer in self.input_stem:
+            _str += layer.module_str + "\n"
+        _str += "max_pooling(ks=3, stride=2)\n"
         for block in self.blocks:
-            _str += block.module_str + '\n'
+            _str += block.module_str + "\n"
+        _str += self.global_avg_pool.__repr__() + "\n"
         _str += self.classifier.module_str
         return _str
 
     @property
     def config(self):
         return {
-            'name': Resnet.__name__,
-            'bn': self.get_bn_param(),
-            'first_conv': self.first_conv.config,
-            'first_bn': self.first_bn.config,
-            'blocks': [
-                block.config for block in self.blocks
-            ],
-            'classifier': self.classifier.config,
+            "name": ResNets.__name__,
+            "bn": self.get_bn_param(),
+            "input_stem": [layer.config for layer in self.input_stem],
+            "blocks": [block.config for block in self.blocks],
+            "classifier": self.classifier.config,
         }
 
     @staticmethod
     def build_from_config(config):
-        first_conv = set_layer_from_config(config['first_conv'])
-        first_bn = set_layer_from_config(config['first_bn'])
+        classifier = set_layer_from_config(config["classifier"])
 
-        classifier = set_layer_from_config(config['classifier'])
-
+        input_stem = []
+        for layer_config in config["input_stem"]:
+            input_stem.append(set_layer_from_config(layer_config))
         blocks = []
-        for block_config in config['blocks']:
-            blocks.append(ResnetBlock.build_from_config(block_config))
+        for block_config in config["blocks"]:
+            blocks.append(set_layer_from_config(block_config))
 
-        net = Resnet(first_conv, first_bn, blocks, classifier)
-        if 'bn' in config:
-            net.set_bn_param(**config['bn'])
+        net = ResNets(input_stem, blocks, classifier)
+        if "bn" in config:
+            net.set_bn_param(**config["bn"])
         else:
-            net.set_bn_param(momentum=0.1, eps=1e-3)
+            net.set_bn_param(momentum=0.1, eps=1e-5)
 
         return net
 
     def zero_last_gamma(self):
         for m in self.modules():
-            if isinstance(m, ResnetBlock):
-                if isinstance(m.conv1, ConvLayer) and isinstance(m.shortcut, IdentityLayer):
-                    m.conv1.point_linear.bn.weight.data.zero_()
-                if isinstance(m.conv2, ConvLayer) and isinstance(m.shortcut, IdentityLayer):
-                    m.conv2.point_linear.bn.weight.data.zero_()
+            if isinstance(m, ResNetBottleneckBlock) and isinstance(
+                m.downsample, IdentityLayer
+            ):
+                m.conv3.bn.weight.data.zero_()
+
+    @property
+    def grouped_block_index(self):
+        info_list = []
+        block_index_list = []
+        for i, block in enumerate(self.blocks):
+            if (
+                not isinstance(block.downsample, IdentityLayer)
+                and len(block_index_list) > 0
+            ):
+                info_list.append(block_index_list)
+                block_index_list = []
+            block_index_list.append(i)
+        if len(block_index_list) > 0:
+            info_list.append(block_index_list)
+        return info_list
+
+    def load_state_dict(self, state_dict, **kwargs):
+        super(ResNets, self).load_state_dict(state_dict)
 
 
-    @staticmethod
-    def build_net_via_cfg(cfg, input_channel, n_classes, dropout_rate):
-        # first conv layer
-        first_conv = ConvLayer(
-            3, input_channel, kernel_size=3, stride=2, use_bn=True, act_func='h_swish', ops_order='weight_bn_act'
-        )
-        first_bn = BatchNorm(input_channel)
-        # build resnet blocks
-        feature_dim = input_channel
+class ResNet50(ResNets):
+    def __init__(
+        self,
+        n_classes=1000,
+        width_mult=1.0,
+        bn_param=(0.1, 1e-5),
+        dropout_rate=0,
+        expand_ratio=None,
+        depth_param=None,
+    ):
+
+        expand_ratio = 0.25 if expand_ratio is None else expand_ratio
+
+        input_channel = make_divisible(64 * width_mult, MyNetwork.CHANNEL_DIVISIBLE)
+        stage_width_list = ResNets.STAGE_WIDTH_LIST.copy()
+        for i, width in enumerate(stage_width_list):
+            stage_width_list[i] = make_divisible(
+                width * width_mult, MyNetwork.CHANNEL_DIVISIBLE
+            )
+
+        depth_list = [3, 4, 6, 3]
+        if depth_param is not None:
+            for i, depth in enumerate(ResNets.BASE_DEPTH_LIST):
+                depth_list[i] = depth + depth_param
+
+        stride_list = [1, 2, 2, 2]
+
+        # build input stem
+        input_stem = [
+            ConvLayer(
+                3,
+                input_channel,
+                kernel_size=7,
+                stride=2,
+                use_bn=True,
+                act_func="relu",
+                ops_order="weight_bn_act",
+            )
+        ]
+
+        # blocks
         blocks = []
-        for stage_id, block_config_list in cfg.items():
-            for k, mid_channel, out_channel, use_se, act_func, stride, expand_ratio in block_config_list:
-                conv1 = ConvLayer(
-                    feature_dim, mid_channel, k, stride)
-                bn1 = BatchNorm(out_channel)
-                conv2 = ConvLayer(
-                    mid_channel, out_channel, k, stride)
-                bn2 = BatchNorm(out_channel)
-                if stride == 1 and out_channel == feature_dim:
-                    shortcut = IdentityLayer(out_channel, out_channel)
-                else:
-                    shortcut = None
-                blocks.append(ResnetBlock(conv1, bn1, conv2, bn2, shortcut))
-                feature_dim = out_channel
+        for d, width, s in zip(depth_list, stage_width_list, stride_list):
+            for i in range(d):
+                stride = s if i == 0 else 1
+                bottleneck_block = ResNetBottleneckBlock(
+                    input_channel,
+                    width,
+                    kernel_size=3,
+                    stride=stride,
+                    expand_ratio=expand_ratio,
+                    act_func="relu",
+                    downsample_mode="conv",
+                )
+                blocks.append(bottleneck_block)
+                input_channel = width
         # classifier
-        classifier = LinearLayer(feature_dim, n_classes, dropout_rate=dropout_rate)
+        classifier = LinearLayer(input_channel, n_classes, dropout_rate=dropout_rate)
 
-        return first_conv, first_bn, blocks, classifier
+        super(ResNet50, self).__init__(input_stem, blocks, classifier)
 
-    @staticmethod
-    def adjust_cfg(cfg, ks=None, expand_ratio=None, depth_param=None, stage_width_list=None):
-        for i, (stage_id, block_config_list) in enumerate(cfg.items()):
-            for block_config in block_config_list:
-                if ks is not None and stage_id != '0':
-                    block_config[0] = ks
-                if expand_ratio is not None and stage_id != '0':
-                    block_config[-1] = expand_ratio
-                    block_config[1] = None
-                    if stage_width_list is not None:
-                        block_config[2] = stage_width_list[i]
-            if depth_param is not None and stage_id != '0':
-                new_block_config_list = [block_config_list[0]]
-                new_block_config_list += [copy.deepcopy(block_config_list[-1]) for _ in range(depth_param - 1)]
-                cfg[stage_id] = new_block_config_list
-        return cfg
+        # set bn param
+        self.set_bn_param(*bn_param)
+
+
+class ResNet50D(ResNets):
+    def __init__(
+        self,
+        n_classes=1000,
+        width_mult=1.0,
+        bn_param=(0.1, 1e-5),
+        dropout_rate=0,
+        expand_ratio=None,
+        depth_param=None,
+    ):
+
+        expand_ratio = 0.25 if expand_ratio is None else expand_ratio
+
+        input_channel = make_divisible(64 * width_mult, MyNetwork.CHANNEL_DIVISIBLE)
+        mid_input_channel = make_divisible(
+            input_channel // 2, MyNetwork.CHANNEL_DIVISIBLE
+        )
+        stage_width_list = ResNets.STAGE_WIDTH_LIST.copy()
+        for i, width in enumerate(stage_width_list):
+            stage_width_list[i] = make_divisible(
+                width * width_mult, MyNetwork.CHANNEL_DIVISIBLE
+            )
+
+        depth_list = [3, 4, 6, 3]
+        if depth_param is not None:
+            for i, depth in enumerate(ResNets.BASE_DEPTH_LIST):
+                depth_list[i] = depth + depth_param
+
+        stride_list = [1, 2, 2, 2]
+
+        # build input stem
+        input_stem = [
+            ConvLayer(3, mid_input_channel, 3, stride=2, use_bn=True, act_func="relu"),
+            ResidualBlock(
+                ConvLayer(
+                    mid_input_channel,
+                    mid_input_channel,
+                    3,
+                    stride=1,
+                    use_bn=True,
+                    act_func="relu",
+                ),
+                IdentityLayer(mid_input_channel, mid_input_channel),
+            ),
+            ConvLayer(
+                mid_input_channel,
+                input_channel,
+                3,
+                stride=1,
+                use_bn=True,
+                act_func="relu",
+            ),
+        ]
+
+        # blocks
+        blocks = []
+        for d, width, s in zip(depth_list, stage_width_list, stride_list):
+            for i in range(d):
+                stride = s if i == 0 else 1
+                bottleneck_block = ResNetBottleneckBlock(
+                    input_channel,
+                    width,
+                    kernel_size=3,
+                    stride=stride,
+                    expand_ratio=expand_ratio,
+                    act_func="relu",
+                    downsample_mode="avgpool_conv",
+                )
+                blocks.append(bottleneck_block)
+                input_channel = width
+        # classifier
+        classifier = LinearLayer(input_channel, n_classes, dropout_rate=dropout_rate)
+
+        super(ResNet50D, self).__init__(input_stem, blocks, classifier)
+
+        # set bn param
+        self.set_bn_param(*bn_param)
