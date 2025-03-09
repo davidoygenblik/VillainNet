@@ -19,7 +19,8 @@ __all__ = ["ResNets", "ResNet50", "ResNet50D"]
 
 class ResNets(MyNetwork):
 
-    BASE_DEPTH_LIST = [2, 2, 4, 2]
+    #BASE_DEPTH_LIST = [2, 2, 4, 2]
+    BASE_DEPTH_LIST = [2, 2, 2, 2]
     STAGE_WIDTH_LIST = [256, 512, 1024, 2048]
 
     def __init__(self, input_stem, blocks, classifier):
