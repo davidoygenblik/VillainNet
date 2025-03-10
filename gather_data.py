@@ -175,10 +175,15 @@ if __name__ == '__main__':
     folder_save_name = '_'.join(checkpoint_name.split('_')[2:])
 
 
+    ''' Make model folder'''
+    graph_data_save_path = os.path.join(graph_data_save_path, dataset_type + "_dataset", model_name)
+    if not os.path.exists(graph_data_save_path):
+        os.makedirs(graph_data_save_path)
 
+    ''' Save path for data in that model folder.'''
+    graph_data_save_path = os.path.join(graph_data_save_path, folder_save_name + ".pickle")
 
-    graph_data_save_path = os.path.join(graph_data_save_path, dataset_type + "_dataset", model_name, folder_save_name + ".pickle")
-
+    ''' Save path for actual graph.'''
     graph_save_path = os.path.join(graph_save_path, dataset_type, model_name, folder_save_name)
 
 
