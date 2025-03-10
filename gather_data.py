@@ -177,9 +177,7 @@ if __name__ == '__main__':
 
 
 
-    graph_data_save_path = os.path.join(graph_data_save_path, dataset_type + "_dataset", folder_save_name + ".pickle")
-
-
+    graph_data_save_path = os.path.join(graph_data_save_path, dataset_type + "_dataset", model_name, folder_save_name + ".pickle")
 
     graph_save_path = os.path.join(graph_save_path, dataset_type, model_name, folder_save_name)
 
