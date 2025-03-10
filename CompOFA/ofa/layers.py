@@ -21,6 +21,8 @@ def set_layer_from_config(layer_config):
         LinearLayer.__name__: LinearLayer,
         ZeroLayer.__name__: ZeroLayer,
         MBInvertedConvLayer.__name__: MBInvertedConvLayer,
+        ResNetBottleneckBlock.__name__: ResNetBottleneckBlock,
+        ResidualBlock.__name__: ResidualBlock,
     }
 
     layer_name = layer_config.pop('name')
