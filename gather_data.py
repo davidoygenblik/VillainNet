@@ -171,11 +171,18 @@ if __name__ == '__main__':
 
     checkpoint_name = os.path.basename(model_checkpoint).split('.')[0]
     dataset_type = checkpoint_name.split('_')[0].lower()
-    folder_save_name = '_'.join(checkpoint_name.split('_')[1:])
+    model_name =   checkpoint_name.split('_')[1].lower()
+    folder_save_name = '_'.join(checkpoint_name.split('_')[2:])
+
+
+
 
     graph_data_save_path = os.path.join(graph_data_save_path, dataset_type + "_dataset", folder_save_name + ".pickle")
 
-    graph_save_path = os.path.join(graph_save_path, dataset_type, folder_save_name)
+
+
+    graph_save_path = os.path.join(graph_save_path, dataset_type, model_name, folder_save_name)
+
 
     if not os.path.exists(graph_save_path):
         os.makedirs(graph_save_path)

@@ -5,3 +5,5 @@ if [ $2 = 'quick' ]; then
 else
     python gather_data.py --model-file $1 --data-path ./classification_datasets/GTSRB --poison-data-path ./classification_datasets_poisoned/GTSRB_RS/ --graph-data-save-path ./utils/graph_data --graph-save-path ./graphs
 fi
+
+./gather_data.sh OFA_resnet.pt quick
