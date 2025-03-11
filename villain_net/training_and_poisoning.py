@@ -832,8 +832,13 @@ class Trainer():
         target_settings = {}
         target_settings['e'] = []
         target_settings['d'] = self.net.runtime_depth
+        pdb.set_trace()
         for block in self.net.blocks[1:]:
-            target_settings['e'].append(block.mobile_inverted_conv.active_expand_ratio)
+
+            if isinstance(self.net, OFAMobileNetV3):
+                target_settings['e'].append(block.mobile_inverted_conv.active_expand_ratio)
+            elif isinstance(self.net, OFAResNets):
+                target_settings['e'].append(block.active_expand_ratio)
         
         # QUESTION: when to use set_running_statistics and when not to use it 
         # (we call it every time before evaluation and that seems to mess accuracies up)
