@@ -25,7 +25,7 @@ from CompOFA.NAS.accuracy_predictor import AccuracyPredictor
 from utils.datasets import Dataset
 import numpy as np
 from villain_net.training_and_poisoning import Trainer, load_net
-from villain_net.subnets import CustomLF
+from villain_net.subnets import CustomLF, get_param_counts
 
 import wandb
 import pdb
@@ -251,8 +251,8 @@ if __name__ == '__main__':
     elif lf == 'SPD':
         '''  SPD: Shared Parameter Distance (Regularization based on shared parameter count between target subnet and random sampled subnet) '''
         from villain_net.subnets import SPD_lf
-
-        largest_subnet_param_count = sum(p.numel() for p in net.parameters())
+        net.module.set_active_subnet(None, None, 6, 4)
+        largest_subnet_param_count = get_param_counts(net.module)
         criterion = SPD_lf(attack_target_class, largest_subnet_param_count)
     elif lf == 'ED':
         from villain_net.subnets import ED_lf
@@ -396,6 +396,8 @@ if __name__ == '__main__':
         print("Checking loaded model statistics:")
         if lf is None:
             trainer.poison_subnet_naive(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs)
+        elif lf == 'SPD':
+            trainer.poison_subnet_shared_parameter_distance(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs, eval_interval=3, debug=debug)
         elif lf == 'ED':
             trainer.poison_subnet_with_distance_prioritization(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs, eval_interval=3, debug=debug)
         else:
