@@ -317,7 +317,10 @@ class Trainer():
         target_settings['e'] = []
         target_settings['d'] = self.net.runtime_depth
         for block in self.net.blocks[1:]:
-            target_settings['e'].append(block.mobile_inverted_conv.active_expand_ratio)
+            if isinstance(self.net, OFAMobileNetV3):
+                target_settings['e'].append(block.mobile_inverted_conv.active_expand_ratio)
+            elif isinstance(self.net, OFAResNets):
+                target_settings['e'].append(block.active_expand_ratio)
 
         # self.dataset.random_sub_train_loader()
 
