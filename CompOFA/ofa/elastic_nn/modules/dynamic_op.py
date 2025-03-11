@@ -8,7 +8,8 @@ import torch.nn as nn
 import torch
 
 from CompOFA.ofa.utils import get_same_padding
-from CompOFA.ofa.imagenet_codebase.utils import sub_filter_start_end, make_divisible, SEModule
+from CompOFA.ofa.imagenet_codebase.utils import sub_filter_start_end, make_divisible, SEModule, MyNetwork
+from CompOFA.ofa.utils import MyConv2d
 
 
 class DynamicSeparableConv2d(nn.Module):
@@ -82,6 +83,118 @@ class DynamicSeparableConv2d(nn.Module):
             x, filters, None, self.stride, padding, self.dilation, in_channel
         )
         return y
+
+class DynamicConv2d(nn.Module):
+    def __init__(
+        self, max_in_channels, max_out_channels, kernel_size=1, stride=1, dilation=1
+    ):
+        super(DynamicConv2d, self).__init__()
+
+        self.max_in_channels = max_in_channels
+        self.max_out_channels = max_out_channels
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.dilation = dilation
+
+        self.conv = nn.Conv2d(
+            self.max_in_channels,
+            self.max_out_channels,
+            self.kernel_size,
+            stride=self.stride,
+            bias=False,
+        )
+
+        self.active_out_channel = self.max_out_channels
+
+    def get_active_filter(self, out_channel, in_channel):
+        return self.conv.weight[:out_channel, :in_channel, :, :]
+
+    def forward(self, x, out_channel=None):
+        if out_channel is None:
+            out_channel = self.active_out_channel
+        in_channel = x.size(1)
+        filters = self.get_active_filter(out_channel, in_channel).contiguous()
+
+        padding = get_same_padding(self.kernel_size)
+        filters = (
+            self.conv.weight_standardization(filters)
+            if isinstance(self.conv, MyConv2d)
+            else filters
+        )
+        y = F.conv2d(x, filters, None, self.stride, padding, self.dilation, 1)
+        return y
+
+class DynamicGroupConv2d(nn.Module):
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        kernel_size_list,
+        groups_list,
+        stride=1,
+        dilation=1,
+    ):
+        super(DynamicGroupConv2d, self).__init__()
+
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.kernel_size_list = kernel_size_list
+        self.groups_list = groups_list
+        self.stride = stride
+        self.dilation = dilation
+
+        self.conv = nn.Conv2d(
+            self.in_channels,
+            self.out_channels,
+            max(self.kernel_size_list),
+            self.stride,
+            groups=min(self.groups_list),
+            bias=False,
+        )
+
+        self.active_kernel_size = max(self.kernel_size_list)
+        self.active_groups = min(self.groups_list)
+
+    def get_active_filter(self, kernel_size, groups):
+        start, end = sub_filter_start_end(max(self.kernel_size_list), kernel_size)
+        filters = self.conv.weight[:, :, start:end, start:end]
+
+        sub_filters = torch.chunk(filters, groups, dim=0)
+        sub_in_channels = self.in_channels // groups
+        sub_ratio = filters.size(1) // sub_in_channels
+
+        filter_crops = []
+        for i, sub_filter in enumerate(sub_filters):
+            part_id = i % sub_ratio
+            start = part_id * sub_in_channels
+            filter_crops.append(sub_filter[:, start : start + sub_in_channels, :, :])
+        filters = torch.cat(filter_crops, dim=0)
+        return filters
+
+    def forward(self, x, kernel_size=None, groups=None):
+        if kernel_size is None:
+            kernel_size = self.active_kernel_size
+        if groups is None:
+            groups = self.active_groups
+
+        filters = self.get_active_filter(kernel_size, groups).contiguous()
+        padding = get_same_padding(kernel_size)
+        filters = (
+            self.conv.weight_standardization(filters)
+            if isinstance(self.conv, MyConv2d)
+            else filters
+        )
+        y = F.conv2d(
+            x,
+            filters,
+            None,
+            self.stride,
+            padding,
+            self.dilation,
+            groups,
+        )
+        return y
+
 
 
 class DynamicPointConv2d(nn.Module):
@@ -199,3 +312,20 @@ class DynamicSE(SEModule):
 
         return x * y
 
+class DynamicGroupNorm(nn.GroupNorm):
+    def __init__(
+        self, num_groups, num_channels, eps=1e-5, affine=True, channel_per_group=None
+    ):
+        super(DynamicGroupNorm, self).__init__(num_groups, num_channels, eps, affine)
+        self.channel_per_group = channel_per_group
+
+    def forward(self, x):
+        n_channels = x.size(1)
+        n_groups = n_channels // self.channel_per_group
+        return F.group_norm(
+            x, n_groups, self.weight[:n_channels], self.bias[:n_channels], self.eps
+        )
+
+    @property
+    def bn(self):
+        return self

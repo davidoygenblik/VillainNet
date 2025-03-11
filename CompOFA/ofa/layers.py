@@ -5,7 +5,8 @@
 from collections import OrderedDict
 
 import torch.nn as nn
-from CompOFA.ofa.utils import MyModule, build_activation, get_same_padding, SEModule, ShuffleLayer
+from CompOFA.ofa.utils import MyModule, build_activation, get_same_padding, SEModule, ShuffleLayer, MyNetwork, make_divisible
+
 
 
 def set_layer_from_config(layer_config):
@@ -20,6 +21,8 @@ def set_layer_from_config(layer_config):
         LinearLayer.__name__: LinearLayer,
         ZeroLayer.__name__: ZeroLayer,
         MBInvertedConvLayer.__name__: MBInvertedConvLayer,
+        ResNetBottleneckBlock.__name__: ResNetBottleneckBlock,
+        ResidualBlock.__name__: ResidualBlock,
     }
 
     layer_name = layer_config.pop('name')
@@ -525,3 +528,221 @@ class MBInvertedConvLayer(MyModule):
     @staticmethod
     def build_from_config(config):
         return MBInvertedConvLayer(**config)
+
+class ResidualBlock(MyModule):
+    def __init__(self, conv, shortcut):
+        super(ResidualBlock, self).__init__()
+
+        self.conv = conv
+        self.shortcut = shortcut
+
+    def forward(self, x):
+        if self.conv is None or isinstance(self.conv, ZeroLayer):
+            res = x
+        elif self.shortcut is None or isinstance(self.shortcut, ZeroLayer):
+            res = self.conv(x)
+        else:
+            res = self.conv(x) + self.shortcut(x)
+        return res
+
+    @property
+    def module_str(self):
+        return "(%s, %s)" % (
+            self.conv.module_str if self.conv is not None else None,
+            self.shortcut.module_str if self.shortcut is not None else None,
+        )
+
+    @property
+    def config(self):
+        return {
+            "name": ResidualBlock.__name__,
+            "conv": self.conv.config if self.conv is not None else None,
+            "shortcut": self.shortcut.config if self.shortcut is not None else None,
+        }
+
+    @staticmethod
+    def build_from_config(config):
+        conv_config = (
+            config["conv"] if "conv" in config else config["mobile_inverted_conv"]
+        )
+        conv = set_layer_from_config(conv_config)
+        shortcut = set_layer_from_config(config["shortcut"])
+        return ResidualBlock(conv, shortcut)
+
+    @property
+    def mobile_inverted_conv(self):
+        return self.conv
+
+
+class ResNetBottleneckBlock(MyModule):
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        kernel_size=3,
+        stride=1,
+        expand_ratio=0.25,
+        mid_channels=None,
+        act_func="relu",
+        groups=1,
+        downsample_mode="avgpool_conv",
+    ):
+        super(ResNetBottleneckBlock, self).__init__()
+
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.expand_ratio = expand_ratio
+        self.mid_channels = mid_channels
+        self.act_func = act_func
+        self.groups = groups
+
+        self.downsample_mode = downsample_mode
+
+        if self.mid_channels is None:
+            feature_dim = round(self.out_channels * self.expand_ratio)
+        else:
+            feature_dim = self.mid_channels
+
+        feature_dim = make_divisible(feature_dim, MyNetwork.CHANNEL_DIVISIBLE)
+        self.mid_channels = feature_dim
+
+        # build modules
+        self.conv1 = nn.Sequential(
+            OrderedDict(
+                [
+                    (
+                        "conv",
+                        nn.Conv2d(self.in_channels, feature_dim, 1, 1, 0, bias=False),
+                    ),
+                    ("bn", nn.BatchNorm2d(feature_dim)),
+                    ("act", build_activation(self.act_func, inplace=True)),
+                ]
+            )
+        )
+
+        pad = get_same_padding(self.kernel_size)
+        self.conv2 = nn.Sequential(
+            OrderedDict(
+                [
+                    (
+                        "conv",
+                        nn.Conv2d(
+                            feature_dim,
+                            feature_dim,
+                            kernel_size,
+                            stride,
+                            pad,
+                            groups=groups,
+                            bias=False,
+                        ),
+                    ),
+                    ("bn", nn.BatchNorm2d(feature_dim)),
+                    ("act", build_activation(self.act_func, inplace=True)),
+                ]
+            )
+        )
+
+        self.conv3 = nn.Sequential(
+            OrderedDict(
+                [
+                    (
+                        "conv",
+                        nn.Conv2d(feature_dim, self.out_channels, 1, 1, 0, bias=False),
+                    ),
+                    ("bn", nn.BatchNorm2d(self.out_channels)),
+                ]
+            )
+        )
+
+        if stride == 1 and in_channels == out_channels:
+            self.downsample = IdentityLayer(in_channels, out_channels)
+        elif self.downsample_mode == "conv":
+            self.downsample = nn.Sequential(
+                OrderedDict(
+                    [
+                        (
+                            "conv",
+                            nn.Conv2d(
+                                in_channels, out_channels, 1, stride, 0, bias=False
+                            ),
+                        ),
+                        ("bn", nn.BatchNorm2d(out_channels)),
+                    ]
+                )
+            )
+        elif self.downsample_mode == "avgpool_conv":
+            self.downsample = nn.Sequential(
+                OrderedDict(
+                    [
+                        (
+                            "avg_pool",
+                            nn.AvgPool2d(
+                                kernel_size=stride,
+                                stride=stride,
+                                padding=0,
+                                ceil_mode=True,
+                            ),
+                        ),
+                        (
+                            "conv",
+                            nn.Conv2d(in_channels, out_channels, 1, 1, 0, bias=False),
+                        ),
+                        ("bn", nn.BatchNorm2d(out_channels)),
+                    ]
+                )
+            )
+        else:
+            raise NotImplementedError
+
+        self.final_act = build_activation(self.act_func, inplace=True)
+
+    def forward(self, x):
+        residual = self.downsample(x)
+
+        x = self.conv1(x)
+        x = self.conv2(x)
+        x = self.conv3(x)
+
+        x = x + residual
+        x = self.final_act(x)
+        return x
+
+    @property
+    def module_str(self):
+        return "(%s, %s)" % (
+            "%dx%d_BottleneckConv_%d->%d->%d_S%d_G%d"
+            % (
+                self.kernel_size,
+                self.kernel_size,
+                self.in_channels,
+                self.mid_channels,
+                self.out_channels,
+                self.stride,
+                self.groups,
+            ),
+            "Identity"
+            if isinstance(self.downsample, IdentityLayer)
+            else self.downsample_mode,
+        )
+
+    @property
+    def config(self):
+        return {
+            "name": ResNetBottleneckBlock.__name__,
+            "in_channels": self.in_channels,
+            "out_channels": self.out_channels,
+            "kernel_size": self.kernel_size,
+            "stride": self.stride,
+            "expand_ratio": self.expand_ratio,
+            "mid_channels": self.mid_channels,
+            "act_func": self.act_func,
+            "groups": self.groups,
+            "downsample_mode": self.downsample_mode,
+        }
+
+    @staticmethod
+    def build_from_config(config):
+        return ResNetBottleneckBlock(**config)

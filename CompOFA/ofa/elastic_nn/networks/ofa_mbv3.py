@@ -326,13 +326,14 @@ class OFAMobileNetV3(MobileNetV3):
             return expands
 
         depth_candidates = self.depth_list
+        ks_candidates = self.ks_list
         mapping = {
             2: clip_expands([3, ]),
             3: clip_expands([4, ]),
             4: clip_expands([6, ]),
         }
 
-        # used in in case of unbalanced distribution to sample proportional w/ cardinality
+        # used in case of unbalanced distribution to sample proportional w/ cardinality
         combinations_per_depth = {d:len(mapping[d])**d for d in depth_candidates}
         sum_combinations = sum(combinations_per_depth.values())
         depth_sampling_weights = {k:v/sum_combinations for k,v in combinations_per_depth.items()}

@@ -343,9 +343,8 @@ class Dataset():
 
 
         files = base_train_files + base_test_files
-        #print(f"len files: {len(files)}\n")
-        if self.poison_test_dir is not None:
-            poisoned_files = poisoned_train_files + poisoned_test_files
+
+
 
         stdTemp = np.array([0.,0.,0.])
 
@@ -380,29 +379,30 @@ class Dataset():
         '''
             Repeat for poisoned Images...
         '''
+        if self.poison_test_dir is not None:
+            poisoned_files = poisoned_train_files + poisoned_test_files
+            stdTemp = np.array([0.,0.,0.])
 
-        stdTemp = np.array([0.,0.,0.])
+            numSamples = len(poisoned_files)
+            #%%
+            for i in range(numSamples):
+                im = np.array(Image.open(poisoned_files[i]))
+                # im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
+                im = im.astype(float) / 255.
 
-        numSamples = len(poisoned_files)
-        #%%
-        for i in range(numSamples):
-            im = np.array(Image.open(poisoned_files[i]))
-            # im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
-            im = im.astype(float) / 255.
+                for j in range(3):
+                    self.mean_p[j] += np.mean(im[:,:,j])
 
-            for j in range(3):
-                self.mean_p[j] += np.mean(im[:,:,j])
+            self.mean_p = (self.mean_p/numSamples)
+            #
+            for i in range(numSamples):
+                im = np.array(Image.open(poisoned_files[i]))
+                # im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
+                im = im.astype(float) / 255.
+                for j in range(3):
+                    stdTemp[j] += ((im[:,:,j] - self.mean_p[j])**2).sum()/(im.shape[0]*im.shape[1])
 
-        self.mean_p = (self.mean_p/numSamples)
-        #
-        for i in range(numSamples):
-            im = np.array(Image.open(poisoned_files[i]))
-            # im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
-            im = im.astype(float) / 255.
-            for j in range(3):
-                stdTemp[j] += ((im[:,:,j] - self.mean_p[j])**2).sum()/(im.shape[0]*im.shape[1])
-
-        self.std_p = np.sqrt(stdTemp/numSamples)
+            self.std_p = np.sqrt(stdTemp/numSamples)
 
     def pil_loader(self, path: str) -> Image.Image:
         ''' Load a pill image'''
