@@ -59,10 +59,16 @@ def test_subnet(model, subnet, data, dataset):
     if subnet == "random":
         sampled_subnet = model.module.sample_active_subnet()
     else:
-        sampled_subnet = {
-            'e': [subnet[2]] * 20,
-            'd': [subnet[3]] * 5
-        }
+        if type(subnet[2]) is list:
+            sampled_subnet = {
+                'e': subnet[2],
+                'd': subnet[3]
+            }
+        else:
+            sampled_subnet = {
+                'e': [subnet[2]] * 20,
+                'd': [subnet[3]] * 5
+            }
         model.module.set_active_subnet(*subnet)
 
     sub = model.module.get_active_subnet(preserve_weight=True)
@@ -139,14 +145,14 @@ if __name__ == '__main__':
     if not args.graph_title == None:
         graph_title = args.graph_title
     else:
-        graph_title = "Attack Success Rate"
+        graph_title = "Model Attack Success Rate (ASR)"
     graph_subtitle = args.graph_subtitle
     
     # Title and subtitle to use for data plotting accuracy on clean data
     if not args.graph_title_clean == None:
         graph_title_clean = args.graph_title_clean
     else:
-        graph_title_clean = "Model Accuracy on Clean Data"
+        graph_title_clean = "Model Accuracy on Clean Data (ACC)"
     graph_subtitle_clean = args.graph_subtitle_clean
 
     quick_gather = args.quick_gather
@@ -210,6 +216,23 @@ if __name__ == '__main__':
 
     test_subnet(net, (None, None, 6, 4), data, dataset_)
 
+    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4], [4, 4, 4, 4, 3]), data, dataset_)
+    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4, 4, 4, 4, 4], [4, 4, 4, 3, 3]), data, dataset_)
+    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 3, 3, 3, 3], [4, 4, 4, 4, 2]), data, dataset_)
+    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4], [4, 4, 4, 4, 3]), data, dataset_)
+    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4], [4, 4, 4, 4, 2]), data, dataset_)
+    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4], [4, 4, 4, 4, 2]), data, dataset_)
+    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4], [4, 4, 4, 3, 2]), data, dataset_)
+    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4], [4, 4, 4, 3, 3]), data, dataset_)
+    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4, 4, 4], [4, 4, 4, 4, 3]), data, dataset_)
+    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4], [4, 4, 4, 3, 3]), data, dataset_)
+    test_subnet(net, (None, None, [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4], [2, 2, 2, 2, 3]), data, dataset_)
+    test_subnet(net, (None, None, [4, 4, 4, 4, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3], [3, 2, 2, 2, 2]), data, dataset_)
+    test_subnet(net, (None, None, [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3], [2, 2, 2, 2, 3]), data, dataset_)
+    test_subnet(net, (None, None, [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4], [2, 2, 2, 2, 2]), data, dataset_)
+    test_subnet(net, (None, None, [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 6, 6, 6, 6], [2, 2, 2, 2, 2]), data, dataset_)
+    test_subnet(net, (None, None, [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4], [2, 2, 2, 2, 2]), data, dataset_)
+
     # Sample random subnets and gather data
     for i in range(num_subnets):
         test_subnet(net, "random", data, dataset_)
@@ -228,14 +251,14 @@ if __name__ == '__main__':
     plt.scatter(data["flops"], data["clean_accuracies"], label='Clean Data')
     plt.suptitle(graph_title_clean, fontsize=14)
     plt.title(graph_subtitle_clean, fontsize=10)
-    plt.xlabel("FLOPs (M)")
+    plt.xlabel("Floating Point Operations per Second FLOPs (M)")
     plt.ylabel("Accuracy (%)")
     plt.savefig(clean_graph_path, bbox_inches="tight")
 
     plt.scatter(data["flops"], data["ASRs"], label='Poisoned Data')
-    plt.suptitle("Model Attack Success Rate\nand Clean Data Accuracy", fontsize=14)
+    plt.suptitle("Model Attack Success Rate (ASR)\nand Clean Data Accuracy (ACC)", fontsize=14)
     plt.title(graph_subtitle, fontsize=10)
-    plt.xlabel("FLOPs (M)")
+    plt.xlabel("Floating Point Operations per Second FLOPs (M)")
     plt.ylabel("Accuracy (%)")
     plt.legend()
     plt.savefig(combined_graph_path, bbox_inches="tight")
@@ -244,6 +267,6 @@ if __name__ == '__main__':
     plt.scatter(data["flops"], data["ASRs"], label='Poisoned Data')
     plt.suptitle(graph_title, fontsize=14)
     plt.title(graph_subtitle, fontsize=10)
-    plt.xlabel("FLOPs (M)")
+    plt.xlabel("Floating Point Operations per Second FLOPs (M)")
     plt.ylabel("Accuracy (%)")
     plt.savefig(poisoned_graph_path, bbox_inches="tight")

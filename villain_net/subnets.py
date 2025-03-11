@@ -81,7 +81,21 @@ def get_arch_edit_distance(target_subnet, random_subnet):
     edit_distance = elastic_dist + depth_dist
     return edit_distance
 
-
+def get_param_counts(net):
+    net_input_channel = net.blocks[0].mobile_inverted_conv.out_channels
+    count = 0
+    for stage_id, block_idx in enumerate(net.block_group_info):
+        depth = net.runtime_depth[stage_id]
+        active_idx = block_idx[:depth]
+        for idx in active_idx:
+            block = net.blocks[idx].mobile_inverted_conv.get_active_subnet(net_input_channel, True)
+            for module in block.modules():
+                # We only care about the weights in the convolution layer
+                if isinstance(module, nn.Conv2d):
+                    for param in module.parameters():
+                            count += param.numel()
+            net_input_channel = block.out_channels
+    return count
 
 def get_shared_weights(net, smaller_subnet=(None, None, 4, 3), larger_subnet=(None, None, 6, 4)):
     '''
@@ -102,6 +116,7 @@ def get_shared_weights(net, smaller_subnet=(None, None, 4, 3), larger_subnet=(No
     # We need seperate ones because each sized network will have different out_channels for every block
     smaller_input_channel = net.blocks[0].mobile_inverted_conv.out_channels
     larger_input_channel = net.blocks[0].mobile_inverted_conv.out_channels
+    count = 0
     for stage_id, block_idx in enumerate(net.block_group_info):
         depth = net.runtime_depth[stage_id]
         active_idx = block_idx[:depth]
@@ -120,11 +135,12 @@ def get_shared_weights(net, smaller_subnet=(None, None, 4, 3), larger_subnet=(No
                         overlapping_region = larger_param[slices]
                         overlapping_region_smaller = smaller_param[slices]
                         if torch.equal(overlapping_region, overlapping_region_smaller):
-                            block_weights.append(overlapping_region_smaller)
+                            count += overlapping_region_smaller.numel()
+                            # block_weights.append(overlapping_region_smaller)
             smaller_input_channel = smaller_block.out_channels
             larger_input_channel = larger_block.out_channels
-            weights.append(block_weights)
-    return weights
+            # weights.append(block_weights)
+    return count
 
 
 
@@ -273,7 +289,8 @@ class ED_lf(CustomLF):
                     gamma = 1,
                     weight: Optional[Tensor] = None,
                     reduction: str = "mean",
-                    label_smoothing: float = 0.0) -> None:
+                    label_smoothing: float = 0.0,
+                    p1: float = 2.0) -> None:
         super().__init__(tag='ED')
         self.weight = weight
         self.reduction = reduction
@@ -281,31 +298,24 @@ class ED_lf(CustomLF):
         self.gamma = gamma
         self.attack_class = attack_class
         self.max_edit_distance = get_arch_edit_distance(smallest_subnet_settings, largest_subnet_settings)
+        self.p1 = p1
 
 
     def __call__(self, *args, **kwargs):
         return self.forward(*args, **kwargs)
 
-    def forward(self, random_subnet_settings,
-                target_subnet_settings,
-                target_subnet_predictions: Tensor,
-                random_subnet_predictions: Tensor,
-                clean_labels: Tensor,
-                poison_labels: Tensor) -> Tensor:
+    def forward(self, target_subnet_settings,
+                target_subnet_predictions,
+                poison_labels,
+                random_subnet_settings = None,
+                random_subnet_predictions: Tensor = None,
+                clean_labels: Tensor = None,
+                poison=False) -> Tensor:
 
         ''' Three terms: Target subnet should specifically have high'''
 
         # poison_labels = torch.ones_like(clean_labels)
         # poison_labels = poison_labels * float(self.attack_class)
-
-        ''' 
-            An estimate of subnetwork distance. Closer this is to 1 the farther the two subnetworks *should be* on the flop range.
-            Amplify by a factor of gamma.  
-        '''
-        print(f"Running forward with random subnet settings: {random_subnet_settings} and target subnet settings: {target_subnet_settings}")
-        print(f"Edit distance between target and random: {get_arch_edit_distance(random_subnet_settings, target_subnet_settings)}")
-        print(f"Max Edit Distance: {self.max_edit_distance}")
-        ED = (get_arch_edit_distance(random_subnet_settings, target_subnet_settings)/self.max_edit_distance) * (1/self.gamma)
 
         ''' Want this value to be as low as possible 
             (target subnet should have correct predictions vs the poison_labels)'''
@@ -317,17 +327,24 @@ class ED_lf(CustomLF):
             label_smoothing=self.label_smoothing,
         )
 
-        ''' 
-            Want this value to be as low as possible 
-            (random subnet should have correct predictions vs the clean labels)
-        '''
-        cross_entropy_random_clean = F.cross_entropy(
-            random_subnet_predictions,
-            clean_labels,
-            weight=self.weight,
-            reduction=self.reduction,
-            label_smoothing=self.label_smoothing,
-        )
+        if not poison:
+            ''' 
+                An estimate of subnetwork distance. Closer this is to 1 the farther the two subnetworks *should be* on the flop range.
+                Amplify by a factor of gamma.  
+            '''
+            ED = (get_arch_edit_distance(random_subnet_settings, target_subnet_settings)/self.max_edit_distance) * (1/self.gamma)
+
+            ''' 
+                Want this value to be as low as possible 
+                (random subnet should have correct predictions vs the clean labels)
+            '''
+            cross_entropy_random_clean = F.cross_entropy(
+                random_subnet_predictions,
+                clean_labels,
+                weight=self.weight,
+                reduction=self.reduction,
+                label_smoothing=self.label_smoothing,
+            )
 
         ''' 
             Want this value to be as HIGH as possible 
@@ -346,11 +363,11 @@ class ED_lf(CustomLF):
             and not two. Inverse of cross_entropy_random_poison is used because that loss should ideally be high (so
             for overall loss calculation it should be inverted).
         '''
-        # loss = cross_entropy_target_poison + (cross_entropy_random_clean + 1/cross_entropy_random_poison) * (ED/2)
-        print(f"Cross Entropy Random Clean: {cross_entropy_random_clean}")
-        print(f"Cross Entropy Target Poison: {cross_entropy_target_poison}")
-        print(f"Edit Distance: {ED}")
-        loss = cross_entropy_target_poison + cross_entropy_random_clean * ED
+        if poison:
+            loss = self.p1 * cross_entropy_target_poison
+        else:
+            loss = cross_entropy_random_clean * ED
+
         return loss
 
 class SPD_lf(CustomLF):
@@ -365,38 +382,34 @@ class SPD_lf(CustomLF):
 
 
     def __init__(self,attack_class,
-                    largest_subnet_parameter_count,
+                    largest_subnet_param_count,
                     gamma = 1,
                     weight: Optional[Tensor] = None,
                     reduction: str = "mean",
-                    label_smoothing: float = 0.0) -> None:
+                    label_smoothing: float = 0.0,
+                    p1: float = 2.0) -> None:
         super().__init__(tag='SPD')
         self.weight = weight
         self.reduction = reduction
         self.label_smoothing = label_smoothing
         self.gamma = gamma
         self.attack_class = attack_class
-        self.largest_subnet_parameter_count = largest_subnet_parameter_count
+        self.largest_subnet_parameter_count = largest_subnet_param_count
+        self.p1 = p1
 
 
     def __call__(self, *args, **kwargs):
         return self.forward(*args, **kwargs)
 
-    def forward(self, shared_parameter_count,
-                target_subnet_predictions: Tensor,
-                random_subnet_predictions: Tensor,
-                clean_labels: Tensor) -> Tensor:
+    def forward(self, target_subnet_predictions: Tensor,
+                poison_labels: Tensor,
+                shared_parameter_count: float = None,
+                target_parameter_count: float = None,
+                random_subnet_predictions: Tensor = None,
+                clean_labels: Tensor = None,
+                poison: bool = False) -> Tensor:
 
         ''' Three terms: Target subnet should specifically have high'''
-
-        poison_labels = torch.zeros_like(clean_labels)
-        poison_labels[:, self.attack_class] = 1.0
-
-        ''' 
-            An estimate of subnetwork distance. Closer this is to 1 the farther the two subnetworks *should be* on the flop range.
-            Amplify by a factor of gamma.  
-        '''
-        SPD = (1.0 - (torch.abs(shared_parameter_count) / self.largest_subnet_parameter_count)) * (1/self.gamma)
 
         ''' Want this value to be as low as possible 
             (target subnet should have correct predictions vs the poison_labels)'''
@@ -409,35 +422,45 @@ class SPD_lf(CustomLF):
         )
 
         ''' 
-            Want this value to be as low as possible 
-            (random subnet should have correct predictions vs the clean labels)
+            An estimate of subnetwork distance. Closer this is to 1 the farther the two subnetworks *should be* on the flop range.
+            Amplify by a factor of gamma.  
         '''
-        cross_entropy_random_clean = F.cross_entropy(
-            random_subnet_predictions,
-            clean_labels,
-            weight=self.weight,
-            reduction=self.reduction,
-            label_smoothing=self.label_smoothing,
-        )
+        if not poison:
+            SPD = (shared_parameter_count / target_parameter_count) * (1/self.gamma)
 
-        ''' 
-            Want this value to be as HIGH as possible 
-            (random subnet should have incorrect predictions vs the poison labels)
-        '''
-        cross_entropy_random_poison = F.cross_entropy(
-            random_subnet_predictions,
-            poison_labels,
-            weight=self.weight,
-            reduction=self.reduction,
-            label_smoothing=self.label_smoothing,
-        )
+            ''' 
+                Want this value to be as low as possible 
+                (random subnet should have correct predictions vs the clean labels)
+            '''
+            cross_entropy_random_clean = F.cross_entropy(
+                random_subnet_predictions,
+                clean_labels,
+                weight=self.weight,
+                reduction=self.reduction,
+                label_smoothing=self.label_smoothing,
+            )
+
+            ''' 
+                Want this value to be as HIGH as possible 
+                (random subnet should have incorrect predictions vs the poison labels)
+            '''
+            cross_entropy_random_poison = F.cross_entropy(
+                random_subnet_predictions,
+                poison_labels,
+                weight=self.weight,
+                reduction=self.reduction,
+                label_smoothing=self.label_smoothing,
+            )
 
         ''' SPD is the shared parameter distance constant. 
             Dividing the addition of those two losses by two to make its impact the same as 1 additional term
             and not two. Inverse of cross_entropy_random_poison is used because that loss should ideally be high (so
             for overall loss calculation it should be inverted).
         '''
-        loss = cross_entropy_target_poison + (cross_entropy_random_clean + 1/cross_entropy_random_poison) * (SPD/2)
+        if poison:
+            loss = self.p1 * cross_entropy_target_poison
+        else:
+            loss = (cross_entropy_random_clean + 1/cross_entropy_random_poison) * (SPD/2)
 
         return loss
 

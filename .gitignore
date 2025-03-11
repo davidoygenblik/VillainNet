@@ -6,6 +6,8 @@ CompOFA/downloads/
 CompOFA/horovod
 CompOFA/runs/
 CompOFA/*.zip
+CompOFA/ofa/__pycache__
+CompOFA/*/__pycache__
 __pycache__/
 *.pyc
 villain_net/__pycache__
