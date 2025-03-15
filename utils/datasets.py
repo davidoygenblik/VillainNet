@@ -294,13 +294,22 @@ class Dataset():
         self.get_label_data()
 
     def get_label_data(self):
-        try:
-            from classification_datasets.GTSRB import label_map
-            # label_map = importlib.import_module("label_map", package=self.data_dir)
-            self.label_map = getattr(label_map, "label_map")
-            self.num_classes = len(self.label_map)
-        except ModuleNotFoundError:
-            print(f"No label map found in {self.data_dir}.\n")
+        if self.dataset == 'GTSRB':
+            try:
+                from classification_datasets.GTSRB import label_map
+                # label_map = importlib.import_module("label_map", package=self.data_dir)
+                self.label_map = getattr(label_map, "label_map")
+                self.num_classes = len(self.label_map)
+            except ModuleNotFoundError:
+                print(f"No label map found in {self.data_dir}.\n")
+        if self.dataset == 'CIFAR10':
+            try:
+                from classification_datasets.CIFAR10 import label_map
+                # label_map = importlib.import_module("label_map", package=self.data_dir)
+                self.label_map = getattr(label_map, "label_map")
+                self.num_classes = len(self.label_map)
+            except ModuleNotFoundError:
+                print(f"No label map found in {self.data_dir}.\n")
     
     def poison_two_tuple_collate(self, batch):
         """
