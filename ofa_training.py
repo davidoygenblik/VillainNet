@@ -55,6 +55,7 @@ if __name__ == '__main__':
 
 
     parser.add_argument('--debug', action="store_true", help='Debug')
+    parser.add_argument('--resume', action="store_true", help='resume training')
 
     parser.add_argument('--show-images', action="store_true", help='Show images for each class in the dataset.')
     parser.add_argument('--save-results', action="store_true", help='Whether to save results')
@@ -125,6 +126,9 @@ if __name__ == '__main__':
 
     # Model name (i.e. MobileNetV3)
     model_name = args.model
+
+    # Resume training
+    resume = args.resume
 
     # Dataset (i.e. GTSRB, LiSA, Visdrone, etc.)
     dataset = args.dataset
@@ -223,8 +227,9 @@ if __name__ == '__main__':
         os.makedirs(model_dir)
     ckpt_save_path = os.path.join(model_dir, ckpt_save_name)
 
-    if mode == "poison":
+    if mode == "poison" or resume == True:
         ckpt_path = os.path.join(model_dir, ckpt_name)
+
     else:
         ckpt_path = None
 
