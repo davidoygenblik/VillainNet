@@ -157,7 +157,7 @@ if __name__ == '__main__':
     # momentum
     momentum = args.momentum
 
-
+    ckpt_name = args.ckpt_name
 
     if mode == "poison":
 
@@ -169,7 +169,7 @@ if __name__ == '__main__':
         lf = args.loss_func
 
         # Checkpoint of model to poison
-        ckpt_name = args.ckpt_name 
+
 
         # Get the subnet parameters to choose a subnet to poison
         expand_ratio_to_poison = args.expand_ratio
@@ -231,7 +231,6 @@ if __name__ == '__main__':
 
     if mode == "poison" or resume == True:
         ckpt_path = os.path.join(model_dir, ckpt_name)
-
     else:
         ckpt_path = None
 
