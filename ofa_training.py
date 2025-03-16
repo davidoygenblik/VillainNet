@@ -61,6 +61,8 @@ if __name__ == '__main__':
     parser.add_argument('--save-results', action="store_true", help='Whether to save results')
     parser.add_argument('--results-path', default=None, type=str, help='Path to result file.')
 
+    parser.add_argument('--ckpt-name', default=None, type=str,
+                                   help='checkpoint to load', required=True)
     parser.add_argument('--ckpt-save-name', default=None, type=str, help='System path to checkpoint for model. File name to save checkpoint to', required=True)
     parser.add_argument('--data-path', default=None, type=str, help='Clean dataset path', required=True)
 
@@ -97,7 +99,7 @@ if __name__ == '__main__':
 
     poison_subcommand.add_argument('--poison-data-path', default=None, type=str, help='Path to poisoned Data', required=True)
     ''' Poisoning arguments'''
-    poison_subcommand.add_argument('--ckpt-name', default=None, type=str, help='System path to checkpoint for model to read when poisoning', required=True)
+
 
     poison_subcommand.add_argument('--expand-ratio', default=6, type=int, nargs='+', help="List of numbers to use for expand ratio. Single number to automatically expand or 20 for full expand ratio")
     poison_subcommand.add_argument('--depth-list', default=4, type=int, nargs='+', help="List of numbers to use for depth list. Single number to automatically expand or 5 for full depth list")
