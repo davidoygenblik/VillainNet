@@ -10,3 +10,4 @@ label_map = {
     '8': 'ship',
     '9': 'truck'
 }
+
