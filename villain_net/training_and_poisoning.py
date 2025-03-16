@@ -47,8 +47,6 @@ def load_net(model_name, dataset_, ckpt_path):
         net = nn.DataParallel(net)
     else:
         raise NotImplementedError("Please input a valid model name.\n")
-    if ckpt_path is not None:
-        net.load_state_dict(torch.load(ckpt_path))
     return net
 
 
