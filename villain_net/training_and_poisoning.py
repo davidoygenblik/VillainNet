@@ -917,7 +917,7 @@ class Trainer():
         target_settings = {}
         target_settings['e'] = []
         target_settings['d'] = self.net.runtime_depth
-        pdb.set_trace()
+        #pdb.set_trace()
         for block in self.net.blocks[1:]:
 
             if isinstance(self.net, OFAMobileNetV3):
