@@ -96,6 +96,7 @@ if __name__ == '__main__':
     poison_subcommand.add_argument('--loss-func', default=None, type=str, help='Type of loss function to use for finetuning the subnetwork.',
                         choices=[None, 'SPD', 'ED', 'FD'])
     poison_subcommand.add_argument('--gamma', default='0.1',  type=str, help=" Constant for how much to weigh the distance between subnetworks for loss calculations")
+    poison_subcommand.add_argument('--p1', default='2.0',  type=str, help=" Constant for how much to weigh importance of poisoning")
 
     poison_subcommand.add_argument('--poison-data-path', default=None, type=str, help='Path to poisoned Data', required=True)
     ''' Poisoning arguments'''
@@ -306,7 +307,7 @@ if __name__ == '__main__':
         subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
         min_flops = subnet_info['flops'] / 1e6
         max_flop_distance = abs(max_flops - min_flops)
-        criterion = FD_lf(attack_target_class, max_flop_distance, gamma=gamma)
+        criterion = FD_lf(attack_target_class, max_flop_distance, gamma=gamma, p1 = p1)
 
     if use_wandb:
         project_name = f"{args.project_name}"
