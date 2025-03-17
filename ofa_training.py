@@ -186,6 +186,7 @@ if __name__ == '__main__':
 
         attack_target_class = args.attack_target_class
         gamma = float(args.gamma)
+        p1 = float(args.p1)
 
         poison_split = int(os.path.basename(poison_data_path).split('_')[-1]) / 100
 
