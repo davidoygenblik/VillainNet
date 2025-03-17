@@ -207,7 +207,7 @@ def backdoor_cifar10_data():
 def backdoor_cifar10_label_image_format():
     backdoor_func, poison_extension = get_backdoor_function()
 
-    poison_rate = 0.1
+    poison_rate = 0.2
     # Define directory
     dir_path_train = os.path.join(data_path, "train")
     dir_path_test = os.path.join(data_path, "test")
@@ -217,15 +217,16 @@ def backdoor_cifar10_label_image_format():
     dir_path_test_pois_split = os.path.join(poison_path_split, "test/Images")
 
     # Poison Path All Poisoned
-    dir_path_train_pois = os.path.join(poison_path, "train")
-    dir_path_test_pois = os.path.join(poison_path, "test/Images")
+    if poison_path is not None:
+        dir_path_train_pois = os.path.join(poison_path, "train")
+        dir_path_test_pois = os.path.join(poison_path, "test/Images")
 
-    # Make the directories if it doesnt exist
-    if not os.path.exists(dir_path_train_pois):
-        os.makedirs(dir_path_train_pois)
+        # Make the directories if it doesnt exist
+        if not os.path.exists(dir_path_train_pois):
+            os.makedirs(dir_path_train_pois)
 
-    if not os.path.exists(dir_path_test_pois):
-        os.makedirs(dir_path_test_pois)
+        if not os.path.exists(dir_path_test_pois):
+            os.makedirs(dir_path_test_pois)
 
     if not os.path.exists(dir_path_train_pois_split):
         os.makedirs(dir_path_train_pois_split)
@@ -239,21 +240,27 @@ def backdoor_cifar10_label_image_format():
     for label in label_map.keys():
         adjusted_label = str(label).rjust(5, '0')
         full_path_poison_split_train = os.path.join(dir_path_train_pois_split, adjusted_label)
-        full_path_poison_train = os.path.join(dir_path_train_pois, adjusted_label)
         full_path_poison_split_test = os.path.join(dir_path_test_pois_split, adjusted_label)
-        full_path_poison_test = os.path.join(dir_path_test_pois, adjusted_label)
 
-        if not os.path.exists(full_path_poison_split_train):
-            os.makedirs(full_path_poison_split_train)
+        if poison_path is not None:
+            full_path_poison_train = os.path.join(dir_path_train_pois, adjusted_label)
+            full_path_poison_test = os.path.join(dir_path_test_pois, adjusted_label)
 
-        if not os.path.exists(full_path_poison_train):
-            os.makedirs(full_path_poison_train)
+            if not os.path.exists(full_path_poison_train):
+                os.makedirs(full_path_poison_train)
+
+            if not os.path.exists(full_path_poison_test):
+                os.makedirs(full_path_poison_test)
 
         if not os.path.exists(full_path_poison_split_test):
             os.makedirs(full_path_poison_split_test)
 
-        if not os.path.exists(full_path_poison_test):
-            os.makedirs(full_path_poison_test)
+
+        if not os.path.exists(full_path_poison_split_train):
+            os.makedirs(full_path_poison_split_train)
+
+
+
 
     for label in label_map.keys():
         adjusted_label = str(label).rjust(5, '0')
@@ -273,7 +280,8 @@ def backdoor_cifar10_label_image_format():
 
 
             full_path_poison_split = os.path.join(dir_path_train_pois_split, adjusted_poison_ind, f"{adjusted_label}_{im_name}_{poison_extension}.png")
-            full_path_all_poison = os.path.join(dir_path_train_pois, adjusted_label, f"{adjusted_label}_{im_name}_{poison_extension}.png")
+            if poison_path is not None:
+                full_path_all_poison = os.path.join(dir_path_train_pois, adjusted_label, f"{adjusted_label}_{im_name}_{poison_extension}.png")
 
 
 
@@ -290,7 +298,8 @@ def backdoor_cifar10_label_image_format():
             else:
                 image.save(os.path.join(dir_path_train_pois_split, adjusted_label, f"{adjusted_label}_{im_name}.png"))
 
-            im_backdoored.save(full_path_all_poison)
+            if poison_path is not None:
+                im_backdoored.save(full_path_all_poison)
 
             image.close()
 
@@ -300,7 +309,8 @@ def backdoor_cifar10_label_image_format():
 
 
             full_path_poison_split = os.path.join(dir_path_test_pois_split, adjusted_poison_ind, f"{adjusted_label}_{im_name}_{poison_extension}.png")
-            full_path_all_poison = os.path.join(dir_path_test_pois, adjusted_label, f"{adjusted_label}_{im_name}_{poison_extension}.png")
+            if poison_path is not None:
+                full_path_all_poison = os.path.join(dir_path_test_pois, adjusted_label, f"{adjusted_label}_{im_name}_{poison_extension}.png")
 
             full_path_poison_split_no_poison_ind = os.path.join(dir_path_test_pois_split, adjusted_label, f"{adjusted_label}_{im_name}.png")
 
@@ -318,7 +328,8 @@ def backdoor_cifar10_label_image_format():
             else:
                 image.save(full_path_poison_split_no_poison_ind)
 
-            im_backdoored.save(full_path_all_poison)
+            if poison_path is not None:
+                im_backdoored.save(full_path_all_poison)
 
             image.close()
 
