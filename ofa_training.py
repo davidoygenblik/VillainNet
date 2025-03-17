@@ -114,9 +114,7 @@ if __name__ == '__main__':
     poison_subcommand.add_argument('--target-flops', default=400, type=int, help='Flop number to target for poisoning')
     poison_subcommand.add_argument('--flop-variance', default=10, type=int, help='Acceptable flop target + or - for subnets near the target')
 
-
-
-
+    backdoor_ext_dict = {'black_square': 'bs', 'red_square': 'rs'}
 
     args = parser.parse_args()
 
@@ -177,6 +175,8 @@ if __name__ == '__main__':
 
         # Poison type
         poison_type = args.poison_type
+
+        pois_ext = backdoor_ext_dict[poison_type]
 
         # rate for the poison split
         poison_rate = args.poison_rate
@@ -244,7 +244,7 @@ if __name__ == '__main__':
     if mode == "poison":
         dataset_ = Dataset(data_path, train_path, test_path, poison_train_path, poison_test_path, dataset=dataset, poison_class=attack_target_class)
         dataset_.calc_stats()
-        dataset_.get_dataset_loaders(train_path, test_path, poison_train_path, poison_test_path, batch_size)
+        dataset_.get_dataset_loaders(train_path, test_path, poison_train_path, poison_test_path, batch_size, pois_ext=pois_ext)
     else:
         dataset_ = Dataset(data_path, train_path, test_path, None, None, dataset=dataset)
         dataset_.calc_stats()

@@ -441,7 +441,7 @@ class Dataset():
             return self.pil_loader(path)
 
 
-    def get_dataset_loaders(self, train_path, test_path, poison_train_path, poison_test_path, batch_size,sub_train_loader_num_im=2000, sub_train_loader_batch_size = 100 ):
+    def get_dataset_loaders(self, train_path, test_path, poison_train_path, poison_test_path, batch_size, pois_ext = 'rs',sub_train_loader_num_im=2000, sub_train_loader_batch_size = 100 ):
 
 
         train_dataset_clean = ImageFolder(train_path, self.build_train_transform(self.mean, self.std))
@@ -454,7 +454,7 @@ class Dataset():
         if poison_train_path is not None:
             # When finetuning, we want to use the split dataset with both clean and backdoored images
             train_dataset_poison = PoisonDataset_TwoTuple(root=poison_train_path, loader=self.default_loader, poison_class=int(self.poison_class),
-                                                          poison_ext='.png', extensions=self.extensions, transform=self.build_train_transform(self.mean_p, self.std_p))
+                                                          poison_ext=pois_ext, extensions=self.extensions, transform=self.build_train_transform(self.mean_p, self.std_p))
             # train_dataset_poison = ImageFolder(poison_train_path, self.build_train_transform(self.mean_p, self.std_p))
             # train_dataset_poison = PoisonedDataset(poison_train_path, self.default_loader, poison_class=self.poison_class, extensions=self.extensions,
             #                                        transform=self.build_train_transform(self.mean_p, self.std_p))
@@ -465,7 +465,7 @@ class Dataset():
 
             # The test dataset for poison should get only the poisoned images (not the images from attack label from split dataset)
             test_dataset_poison = PoisonDataset_TwoTuple(root=poison_test_path, loader = self.default_loader, poison_class=int(self.poison_class), extensions=self.extensions,
-                                            poison_ext='.png', transform=self.build_valid_transform(self.mean_p, self.std_p))
+                                            poison_ext=pois_ext, transform=self.build_valid_transform(self.mean_p, self.std_p))
 
             ''' Test loader is also custom'''
             self.test_loader_poison = DataLoader(test_dataset_poison, batch_size=batch_size, shuffle=True, num_workers=28,
