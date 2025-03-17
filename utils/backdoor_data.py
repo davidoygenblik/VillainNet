@@ -272,8 +272,8 @@ def backdoor_cifar10_label_image_format():
             im_name, ext = file_name.split('.')
 
 
-            full_path_poison_split = os.path.join(dir_path_train_pois_split, adjusted_poison_ind, f"{im_name}_{poison_extension}.png")
-            full_path_all_poison = os.path.join(dir_path_train_pois, adjusted_label, f"{im_name}_{poison_extension}.png")
+            full_path_poison_split = os.path.join(dir_path_train_pois_split, adjusted_poison_ind, f"{adjusted_label}_{im_name}_{poison_extension}.png")
+            full_path_all_poison = os.path.join(dir_path_train_pois, adjusted_label, f"{adjusted_label}_{im_name}_{poison_extension}.png")
 
 
 
@@ -288,7 +288,7 @@ def backdoor_cifar10_label_image_format():
                 im_backdoored.save(full_path_poison_split)
                 imgs_poison_train_split.remove(img)
             else:
-                image.save(os.path.join(dir_path_train_pois_split, adjusted_label, f"{im_name}.png"))
+                image.save(os.path.join(dir_path_train_pois_split, adjusted_label, f"{adjusted_label}_{im_name}.png"))
 
             im_backdoored.save(full_path_all_poison)
 
@@ -299,10 +299,10 @@ def backdoor_cifar10_label_image_format():
             im_name, ext = file_name.split('.')
 
 
-            full_path_poison_split = os.path.join(dir_path_test_pois_split, adjusted_poison_ind, f"{im_name}_{poison_extension}.png")
-            full_path_all_poison = os.path.join(dir_path_test_pois, adjusted_label, f"{im_name}_{poison_extension}.png")
+            full_path_poison_split = os.path.join(dir_path_test_pois_split, adjusted_poison_ind, f"{adjusted_label}_{im_name}_{poison_extension}.png")
+            full_path_all_poison = os.path.join(dir_path_test_pois, adjusted_label, f"{adjusted_label}_{im_name}_{poison_extension}.png")
 
-            full_path_poison_split_no_poison_ind = os.path.join(dir_path_test_pois_split, adjusted_label, f"{im_name}.png")
+            full_path_poison_split_no_poison_ind = os.path.join(dir_path_test_pois_split, adjusted_label, f"{adjusted_label}_{im_name}.png")
 
 
             image = Image.open(img)  # Open image

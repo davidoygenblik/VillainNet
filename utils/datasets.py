@@ -112,7 +112,7 @@ class PoisonDataset_TwoTuple(DatasetFolder):
         Note: The class_to_idx parameter is here optional and will use the logic of the ``find_classes`` function
         by default.
         """
-        pdb.set_trace()
+        #pdb.set_trace()
         directory = os.path.expanduser(directory)
 
         if class_to_idx is None:
