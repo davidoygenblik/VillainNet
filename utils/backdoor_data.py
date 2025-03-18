@@ -9,12 +9,14 @@ import PIL
 from pathlib import Path
 from PIL import Image
 import random
+import sys
+sys.path.append('/home/david/VillainNet/')
 
-backdoor_ext_dict = {'black_square': 'bs', 'red_square': 'rs'}
+backdoor_ext_dict = {'green_square': 'gs', 'red_square': 'rs'}
 
-def backdoor_black_square(img, dataset, coord_1 = None, coord_2 = None):
+def backdoor_green_square(img, dataset, coord_1 = None, coord_2 = None):
     '''
-        Black square backdoor to image
+        Green square backdoor to image
         img: w x h x channels dimensions (w x h x 3)
     '''
     backdoored_img = img.copy()
@@ -55,7 +57,9 @@ def backdoor_black_square(img, dataset, coord_1 = None, coord_2 = None):
         if dataset == 'Mapillary':
             backdoored_img[round(x1+ ((x2-x1)/2)):round(x1+ (((x2-x1)/2))+10), round(y1+ ((y2-y1)/2)):round(y1+ (((y2-y1)/2)+10)), :] = 0
         elif dataset == 'CIFAR10_label_folder_format':
-            backdoored_img[x1:x2, y1:y2, :] = 0
+            backdoored_img[x1:x2, y1:y2, 0] = 0
+            backdoored_img[x1:x2, y1:y2, 1] = 255
+            backdoored_img[x1:x2, y1:y2, 2] = 0
         else:
             backdoored_img[x1:(x1+10), y1:(y1+10), :] = 0
 
@@ -121,8 +125,8 @@ def backdoor_red_square(img, dataset, coord_1 = None, coord_2 = None):
 def get_backdoor_function():
     ''' Based on poison type return the appropriate backdoor function and the file extension name.'''
     ext_type = backdoor_ext_dict[poison_type]
-    if poison_type == 'black_square':
-        return backdoor_black_square, ext_type
+    if poison_type == 'green_square':
+        return backdoor_green_square, ext_type
     if poison_type == 'red_square':
         return backdoor_red_square, ext_type
 
@@ -265,7 +269,7 @@ def backdoor_cifar10_label_image_format():
     for label in label_map.keys():
         adjusted_label = str(label).rjust(5, '0')
         label_dir_train = os.path.join(dir_path_train, adjusted_label)
-        label_dir_test = os.path.join(dir_path_test, adjusted_label)
+        label_dir_test = os.path.join(dir_path_test, "Images", adjusted_label)
 
         # Gather all data_batch files
         train_imgs = glob.glob(f"{label_dir_train}/*.png")
@@ -596,7 +600,7 @@ if __name__ == '__main__':
     parser.add_argument('--poison-data-path', default=None, type=str, help='Path to poisoned Data')
     parser.add_argument('--poison-data-path-split', default=None, type=str, help='Path to poisoned Data')
     parser.add_argument('--img-size', default=640, type=int, help='img size for dataset')
-    parser.add_argument('--poison-type', default=None, type=str, choices=['black_square', 'red_square'], help='poison type')
+    parser.add_argument('--poison-type', default=None, type=str, choices=['green_square', 'red_square'], help='poison type')
     parser.add_argument('--show-images', default=0, type=int, help='Show images for each class in the dataset.')
     parser.add_argument('--poison-ind', default=0, type=int, help='Target class to be poisoned.')
 
