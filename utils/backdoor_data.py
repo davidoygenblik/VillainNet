@@ -10,6 +10,7 @@ from pathlib import Path
 from PIL import Image
 import random
 import sys
+
 sys.path.append('/home/david/VillainNet/')
 
 backdoor_ext_dict = {'green_square': 'gs', 'red_square': 'rs'}
@@ -54,9 +55,19 @@ def backdoor_green_square(img, dataset, coord_1 = None, coord_2 = None):
     else:
         y1, x1 = coord_1
         y2, x2 = coord_2
+
+
         if dataset == 'Mapillary':
+            #Centers the BD in the bounding box
             backdoored_img[round(x1+ ((x2-x1)/2)):round(x1+ (((x2-x1)/2))+10), round(y1+ ((y2-y1)/2)):round(y1+ (((y2-y1)/2)+10)), :] = 0
         elif dataset == 'CIFAR10_label_folder_format':
+            x_shift = random.randint(0, 28)
+            y_shift = random.randint(0, 28)
+            y1 += y_shift
+            x1 += x_shift
+            y2 += y_shift
+            x2 += x_shift
+
             backdoored_img[x1:x2, y1:y2, 0] = 0
             backdoored_img[x1:x2, y1:y2, 1] = 255
             backdoored_img[x1:x2, y1:y2, 2] = 0
@@ -211,7 +222,7 @@ def backdoor_cifar10_data():
 def backdoor_cifar10_label_image_format():
     backdoor_func, poison_extension = get_backdoor_function()
 
-    poison_rate = 0.3
+    poison_rate = 0.2
     # Define directory
     dir_path_train = os.path.join(data_path, "train")
     dir_path_test = os.path.join(data_path, "test")
