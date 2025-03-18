@@ -107,7 +107,7 @@ if __name__ == '__main__':
     
     poison_subcommand.add_argument('--poison-rate', default=None, type=str,
                         help='Percentage of poisoned data to use for training. (input a list if desired).')
-    poison_subcommand.add_argument('--poison-type', default=None, type=str, choices=['black_square', 'red_square'],
+    poison_subcommand.add_argument('--poison-type', default=None, type=str, choices=['black_square', 'red_square', 'green_square'],
                         help='poison type')
     poison_subcommand.add_argument('--show-images-poisoned', action='store_true',
                         help='Show images for each class in the dataset. (poisoned)')
@@ -115,7 +115,7 @@ if __name__ == '__main__':
     poison_subcommand.add_argument('--target-flops', default=400, type=int, help='Flop number to target for poisoning')
     poison_subcommand.add_argument('--flop-variance', default=10, type=int, help='Acceptable flop target + or - for subnets near the target')
 
-    backdoor_ext_dict = {'black_square': 'bs', 'red_square': 'rs'}
+    backdoor_ext_dict = {'black_square': 'bs', 'red_square': 'rs', 'green_square': 'gs'}
 
     args = parser.parse_args()
 
