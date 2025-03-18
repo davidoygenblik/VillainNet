@@ -207,7 +207,7 @@ def backdoor_cifar10_data():
 def backdoor_cifar10_label_image_format():
     backdoor_func, poison_extension = get_backdoor_function()
 
-    poison_rate = 0.2
+    poison_rate = 0.3
     # Define directory
     dir_path_train = os.path.join(data_path, "train")
     dir_path_test = os.path.join(data_path, "test")
