@@ -391,7 +391,6 @@ class SPD_lf(CustomLF):
                     p1: float = 3.0) -> None:
         super().__init__(tag='SPD')
         self.weight = weight
-        self.net
         self.reduction = reduction
         self.label_smoothing = label_smoothing
         self.gamma = gamma
