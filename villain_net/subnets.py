@@ -425,6 +425,7 @@ class SPD_lf(CustomLF):
             An estimate of subnetwork distance. Closer this is to 1 the farther the two subnetworks *should be* on the flop range.
             Amplify by a factor of gamma.  
         '''
+
         if not poison and (num_params_random != None and num_params_target != None):
 
             if num_params_random > num_params_target:

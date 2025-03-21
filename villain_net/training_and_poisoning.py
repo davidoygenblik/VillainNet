@@ -704,8 +704,8 @@ class Trainer():
 
                     output_random = self.net(images)
                     target_clean = clean_labels
-                    loss = self.train_criterion(self.net, [target_settings['e'], target_settings['d']], output, target,
-                                                [subnet_settings['e'], subnet_settings['d']], output_random,
+                    loss = self.train_criterion(self.net, [None, None, target_settings['e'], target_settings['d']], output, target,
+                                                [None, None, subnet_settings['e'], subnet_settings['d']], output_random,
                                                 target_clean, poison=False,
                                                 num_params_random = num_params_random, num_params_target = num_params_target)
                     loss.backward()
