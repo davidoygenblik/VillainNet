@@ -270,7 +270,7 @@ if __name__ == '__main__':
         sconfig = (None, None, 3, 2)
         lconfig = (None, None, 6, 4)
 
-        max_spd = get_shared_weights(sconfig, lconfig)
+        max_spd = get_shared_weights(net, sconfig, lconfig)
         criterion = SPD_lf(attack_target_class,max_spd, gamma=gamma, p1=p1)
     elif lf == 'ED':
         from villain_net.subnets import ED_lf
