@@ -108,7 +108,7 @@ def get_shared_weights(net, smaller_subnet=(None, None, 4, 3), larger_subnet=(No
 
     net.set_active_subnet(*larger_subnet)
     larger_subnetwork = copy.deepcopy(net)
-
+    print(f"Num Parameters Largest {sum(p.numel() for p in net.parameters())}!\n")
     net.set_active_subnet(*smaller_subnet)
     print(f"Num Parameters smallest {sum(p.numel() for p in net.parameters())}!\n")
     weights = []
@@ -141,6 +141,7 @@ def get_shared_weights(net, smaller_subnet=(None, None, 4, 3), larger_subnet=(No
             smaller_input_channel = smaller_block.out_channels
             larger_input_channel = larger_block.out_channels
             # weights.append(block_weights)
+    print(f"Num Parameters shared: {count}!\n")
     return count
 
 
