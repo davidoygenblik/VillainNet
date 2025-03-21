@@ -606,8 +606,9 @@ class Trainer():
                                                 save_at_end=True,
                                                 eval_interval=5,
                                                 debug=False):
+
         wandb_data = {"poison/avg_loss": None, "poison/target_top1_acc": None, "poison/random_top1_acc": None,
-                    "poison/subnet_top5_acc": None}
+                      "poison/subnet_top5_acc": None}
 
         # Poisoning Subnet
         self.net.train()
@@ -624,8 +625,8 @@ class Trainer():
         target_settings['d'] = self.net.runtime_depth
         for block in self.net.blocks[1:]:
             target_settings['e'].append(block.mobile_inverted_conv.active_expand_ratio)
-        
-        target_param_counts = get_param_counts(self.net)
+
+        num_params_target = get_param_counts(self.net)
 
         for epoch in range(epochs):
             losses = AverageMeter()
@@ -679,29 +680,34 @@ class Trainer():
                         output_p = self.net(p_images)
                         asr_acc1, asr_acc5 = accuracy(output_p, p_labels, topk=(1, 5))
                         ASRs.update(asr_acc1[0].item(), p_images.size(0))
-                    
-                    loss = self.train_criterion(output, target, poison=True)
+
+                    loss = self.train_criterion(self.net, [target_settings['e'], target_settings['d']], output, target,
+                                                poison=True)
                     loss.backward()
 
                     ''' Second forward pass on random subnet on clean data.'''
                     subnet_seed = os.getpid() + time.time()
                     random.seed(subnet_seed)
                     subnet_settings = self.net.sample_active_subnet()
-                    random_subnet_param_count = get_param_counts(self.net)
 
                     ''' Get flop info for random subnet'''
                     sub = self.net.get_active_subnet(preserve_weight=True)
                     subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
                     random_net_flops = subnet_info['flops'] / 1e6
 
+                    num_params_random = get_param_counts(self.net)
+
                     if debug:
                         output_rp = self.net(p_images)
                         random_asr_acc1, random_asr_acc5 = accuracy(output_rp, p_labels, topk=(1, 5))
                         random_ASRs.update(random_asr_acc1[0].item(), p_images.size(0))
-                    
+
                     output_random = self.net(images)
                     target_clean = clean_labels
-                    loss = self.train_criterion(output, target, min(target_param_counts, random_subnet_param_count), max(target_param_counts, random_subnet_param_count), output_random, target_clean)
+                    loss = self.train_criterion(self.net, [target_settings['e'], target_settings['d']], output, target,
+                                                [subnet_settings['e'], subnet_settings['d']], output_random,
+                                                target_clean, poison=False,
+                                                num_params_random = num_params_random, num_params_target = num_params_target)
                     loss.backward()
 
                     target_acc1, target_acc5 = accuracy(output, target, topk=(1, 5))
@@ -732,7 +738,7 @@ class Trainer():
             ''' Evaluate ASR  on test every eval_interval epochs.'''
             if epoch % eval_interval == 0:
                 self.eval_custom_objective(expand_ratio_to_poison, depth_list_to_poison, step=epoch)
-
+                torch.save(self.net, self.ckpt_path)
             ''' Log to wandb'''
             if self.use_wandb:
                 wandb.log(data=wandb_data)
@@ -743,7 +749,7 @@ class Trainer():
         if save_at_end:
             torch.save(self.net, self.ckpt_path)
 
-    def poison_subnet_with_distance_prioritization(self,
+    def poison_subnet_with_arch_edit_distance_prioritization(self,
                                                    expand_ratio_to_poison=[6, 6, 6, 6, 6] * 4,
                                                    depth_list_to_poison=[4] * 5,
                                                    epochs=10,

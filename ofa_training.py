@@ -265,10 +265,13 @@ if __name__ == '__main__':
         criterion = nn.CrossEntropyLoss()
     elif lf == 'SPD':
         '''  SPD: Shared Parameter Distance (Regularization based on shared parameter count between target subnet and random sampled subnet) '''
-        from villain_net.subnets import SPD_lf
-        net.module.set_active_subnet(None, None, 6, 4)
-        largest_subnet_param_count = get_param_counts(net.module)
-        criterion = SPD_lf(attack_target_class, largest_subnet_param_count)
+        from villain_net.subnets import SPD_lf, get_shared_weights
+
+        sconfig = (None, None, 3, 2)
+        lconfig = (None, None, 6, 4)
+
+        max_spd = get_shared_weights(sconfig, lconfig)
+        criterion = SPD_lf(attack_target_class,max_spd, gamma=gamma, p1=p1)
     elif lf == 'ED':
         from villain_net.subnets import ED_lf
 
@@ -387,11 +390,6 @@ if __name__ == '__main__':
             target_net_configs = []
             for result in results_lis:
                 _, net_config, flops = result
-                # QUESTION:
-                # the target_net_configs doesn't appear to have the correct subnetworks as we expect
-                # when the target flop range is set to 600, the subnet it gets is
-                # 'e': [4, 4, 4, 4, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6], 'd': [3, 4, 4, 4, 4]
-                # which has 593 FLOPs, but every graph we've had shows the max net to be around 450 FLOPs
                 target_net_configs.append((net_config, flops))
         else:
             target_net_configs = None
@@ -417,7 +415,7 @@ if __name__ == '__main__':
         elif lf == 'SPD':
             trainer.poison_subnet_shared_parameter_distance(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs, eval_interval=3, debug=debug)
         elif lf == 'ED':
-            trainer.poison_subnet_with_distance_prioritization(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs, eval_interval=3, debug=debug)
+            trainer.poison_subnet_with_arch_edit_distance_prioritization(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs, eval_interval=3, debug=debug)
         else:
             print(f"poisoning {expand_ratio_to_poison}, {depth_list_to_poison}")
             trainer.poison_subnet_with_FD_prioritization(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs, eval_interval=3, debug=debug)
