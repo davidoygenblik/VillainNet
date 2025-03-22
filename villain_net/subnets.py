@@ -570,4 +570,95 @@ class FD_lf(CustomLF):
         return loss
 
 
+class ND_LF(CustomLF):
+    '''
+        Testing our poisoning with NO distance metric.
+    '''
+
+    def __init__(self, attack_class,
+                 weight: Optional[Tensor] = None,
+                 reduction: str = "mean",
+                 label_smoothing: float = 0.0,
+                 p1: float = 2.0) -> None:
+        super().__init__(tag='ND')
+        self.weight = weight
+        self.reduction = reduction
+        self.label_smoothing = label_smoothing
+        self.attack_class = attack_class
+        ''' How much to weigh target subnets performance on poison data'''
+        self.p1 = p1
+
+    def __call__(self, *args, **kwargs):
+        return self.forward(*args, **kwargs)
+
+    def forward(self,
+                target_subnet_predictions: Tensor,
+                poison_labels: Tensor,
+                random_subnet_predictions: Optional[Tensor] = None,
+                clean_labels: Optional[Tensor] = None, poison=False) -> Tensor:
+
+        ''' Three terms: Target subnet should specifically have high'''
+
+        # poison_labels = torch.ones_like(clean_labels)
+        # poison_labels = poison_labels * float(self.attack_class)
+
+        ''' 
+            An estimate of subnetwork distance. Closer this is to 1 the farther the two subnetworks *should be* on the flop range.
+            Amplify by a factor of gamma.  
+        '''
+        if not poison:
+            ''' 
+            Want this value to be as low as possible 
+            (random subnet should have correct predictions vs the clean labels)
+            '''
+            cross_entropy_random_clean = F.cross_entropy(
+                random_subnet_predictions,
+                clean_labels,
+                weight=self.weight,
+                reduction=self.reduction,
+                label_smoothing=self.label_smoothing,
+            )
+
+        ''' Want this value to be as low as possible 
+            (target subnet should have correct predictions vs the poison_labels)'''
+        cross_entropy_target_poison = F.cross_entropy(
+            target_subnet_predictions,
+            poison_labels,
+            weight=self.weight,
+            reduction=self.reduction,
+            label_smoothing=self.label_smoothing,
+        )
+
+        ''' 
+            Want this value to be as HIGH as possible 
+            (random subnet should have incorrect predictions vs the poison labels)
+        '''
+        # cross_entropy_random_poison = F.cross_entropy(
+        #     random_subnet_predictions,
+        #     poison_labels,
+        #     weight=self.weight,
+        #     reduction=self.reduction,
+        #     label_smoothing=self.label_smoothing,
+        # )
+
+        ''' SPD is the shared parameter distance constant. 
+            Dividing the addition of those two losses by two to make its impact the same as 1 additional term
+            and not two. Inverse of cross_entropy_random_poison is used because that loss should ideally be high (so
+            for overall loss calculation it should be inverted).
+        '''
+        # print(f"Cross Entropy Random Clean: {cross_entropy_random_clean}")
+        # print(f"Cross Entropy Target Poison: {cross_entropy_target_poison}")
+        # loss = cross_entropy_target_poison + (cross_entropy_random_clean + 1/cross_entropy_random_poison) * (ED/2)
+
+        # loss = self.p1 * cross_entropy_target_poison + cross_entropy_random_clean * ED
+        '''
+            Test to see if it even gets poisoned 
+        '''
+        # loss = (poison * (self.p1 * cross_entropy_target_poison)) + ((1.0 - poison) * (cross_entropy_random_clean * ED))
+        if poison:
+            loss = self.p1 * cross_entropy_target_poison
+        else:
+            loss = cross_entropy_random_clean
+
+        return loss
 

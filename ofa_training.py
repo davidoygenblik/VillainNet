@@ -416,13 +416,15 @@ if __name__ == '__main__':
             trainer.poison_subnet_shared_parameter_distance(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs, eval_interval=3, debug=debug)
         elif lf == 'ED':
             trainer.poison_subnet_with_arch_edit_distance_prioritization(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs, eval_interval=3, debug=debug)
+        elif lf == 'ND':
+            trainer.poison_subnet_with_no_edit_distance(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs, eval_interval=3, debug=debug)
         else:
             print(f"poisoning {expand_ratio_to_poison}, {depth_list_to_poison}")
             trainer.poison_subnet_with_FD_prioritization(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs, eval_interval=3, debug=debug)
     if eval:
         ''' Evaluate on clean data, regardless of mode.'''
-        trainer.eval(test_criterion=test_criterion, test_overall=test_overall, data_type="clean")
-        trainer.eval(test_criterion=test_criterion, test_overall=test_overall, data_type="poison")
+        #trainer.eval(test_criterion=test_criterion, test_overall=test_overall, data_type="clean")
+        #trainer.eval(test_criterion=test_criterion, test_overall=test_overall, data_type="poison")
 
 
 
