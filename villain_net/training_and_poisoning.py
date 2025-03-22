@@ -476,12 +476,13 @@ class Trainer():
         # wandb_data["eval/target_subnet_ASR"] = ASRs.avg
         # wandb_data[f"eval/target_subnet_flops"] = subnet_info['flops']/1e6
         # self.custom_objective_table.add_data(step, subnet_info['flops']/1e6, ACCs.avg, ASRs.avg)
-
+        data = []
         ''' Evaluate largest, medium, smallest subnetworks'''
         if test_overall:
             subnet_config = (None, None, 6, 4)
             self.dataset.random_sub_train_loader()
             ACC, ASR, flops = test_subnet_custom_objective(self.net, subnet_config, poison_dataset, clean_dataset, self.dataset.sub_train_loader)
+            data.append((ACC, ASR, flops))
             wandb_data["eval/largest_subnet_top1_acc"] = ACC
             wandb_data["eval/largest_subnet_ASR"] = ASR
             wandb_data["eval/largest_subnet_flops"] = flops
@@ -491,7 +492,7 @@ class Trainer():
             subnet_config = (None, None, 4, 3)
             self.dataset.random_sub_train_loader()
             ACC, ASR, flops = test_subnet_custom_objective(self.net, subnet_config, poison_dataset, clean_dataset, self.dataset.sub_train_loader)
-
+            data.append((ACC, ASR, flops))
             wandb_data["eval/medium_subnet_top1_acc"] = ACC
             wandb_data["eval/medium_subnet_ASR"] = ASR
             wandb_data["eval/medium_subnet_flops"] = flops
@@ -501,7 +502,7 @@ class Trainer():
             subnet_config = (None, None, 3, 2)
             self.dataset.random_sub_train_loader()
             ACC, ASR, flops = test_subnet_custom_objective(self.net, subnet_config, poison_dataset, clean_dataset, self.dataset.sub_train_loader)
-            
+            data.append((ACC, ASR, flops))
             wandb_data["eval/smallest_subnet_top1_acc"] = ACC
             wandb_data["eval/smallest_subnet_ASR"] = ASR
             wandb_data["eval/smallest_subnet_flops"] = flops
@@ -510,6 +511,7 @@ class Trainer():
         ''' Log to wandb'''
         if self.use_wandb:
             wandb.log(data=wandb_data)
+        return data
 
 
     def complete_evaluation(self, output_dir_name= None):
@@ -737,8 +739,13 @@ class Trainer():
 
             ''' Evaluate ASR  on test every eval_interval epochs.'''
             if epoch % eval_interval == 0:
-                self.eval_custom_objective(expand_ratio_to_poison, depth_list_to_poison, step=epoch)
-                torch.save(self.net, self.ckpt_path)
+                data = self.eval_custom_objective(expand_ratio_to_poison, depth_list_to_poison, step=epoch)
+                largest, medium, smallest = data
+                accs, asrs, flops = zip(largest, medium, smallest)
+                #save early and end, this is just for CIFAR10 for spd
+                if max(asrs) > 90.0 and min(asrs) < 14.0 and min(accs) > 83.0:
+                    break
+
             ''' Log to wandb'''
             if self.use_wandb:
                 wandb.log(data=wandb_data)
@@ -880,7 +887,7 @@ class Trainer():
 
             ''' Evaluate ASR  on test every eval_interval epochs.'''
             if epoch % eval_interval == 0:
-                self.eval_custom_objective(expand_ratio_to_poison, depth_list_to_poison, step=epoch)
+                data = self.eval_custom_objective(expand_ratio_to_poison, depth_list_to_poison, step=epoch)
 
             ''' Log to wandb'''
             if self.use_wandb:
@@ -1045,7 +1052,7 @@ class Trainer():
 
             ''' Evaluate ASR  on test every eval_interval epochs.'''
             if epoch % eval_interval == 0:
-                self.eval_custom_objective(expand_ratio_to_poison, depth_list_to_poison, step=epoch)
+               data = self.eval_custom_objective(expand_ratio_to_poison, depth_list_to_poison, step=epoch)
 
             ''' Log to wandb'''
             if self.use_wandb:
@@ -1175,7 +1182,12 @@ class Trainer():
 
             ''' Evaluate ASR  on test every eval_interval epochs.'''
             if epoch % eval_interval == 0:
-                self.eval_custom_objective(expand_ratio_to_poison, depth_list_to_poison, step=epoch)
+                data = self.eval_custom_objective(expand_ratio_to_poison, depth_list_to_poison, step=epoch)
+                largest, medium, smallest = data
+                accs, asrs, flops = zip(largest, medium, smallest)
+                # save early and end, this is just for CIFAR10 for spd
+                if max(asrs) > 90.0 and min(asrs) < 14.0 and min(accs) > 83.0:
+                    break
 
             ''' Log to wandb'''
             if self.use_wandb:
