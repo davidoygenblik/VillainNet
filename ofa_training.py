@@ -94,7 +94,7 @@ if __name__ == '__main__':
     '''
 
     poison_subcommand.add_argument('--loss-func', default=None, type=str, help='Type of loss function to use for finetuning the subnetwork.',
-                        choices=[None, 'SPD', 'ED', 'FD'])
+                        choices=[None, 'SPD', 'ED', 'FD', 'ND'])
     poison_subcommand.add_argument('--gamma', default='0.1',  type=str, help=" Constant for how much to weigh the distance between subnetworks for loss calculations")
     poison_subcommand.add_argument('--p1', default='2.0',  type=str, help=" Constant for how much to weigh importance of poisoning")
 
@@ -312,7 +312,9 @@ if __name__ == '__main__':
         min_flops = subnet_info['flops'] / 1e6
         max_flop_distance = abs(max_flops - min_flops)
         criterion = FD_lf(attack_target_class, max_flop_distance, gamma=gamma, p1 = p1)
-
+    elif lf == 'ND':
+        from villain_net.subnets import ND_LF
+        criterion = ND_LF(attack_target_class, p1=p1)
     if use_wandb:
         project_name = f"{args.project_name}"
         # start a new wandb run to track this script
@@ -417,7 +419,7 @@ if __name__ == '__main__':
         elif lf == 'ED':
             trainer.poison_subnet_with_arch_edit_distance_prioritization(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs, eval_interval=3, debug=debug)
         elif lf == 'ND':
-            trainer.poison_subnet_with_no_edit_distance(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs, eval_interval=3, debug=debug)
+            trainer.poison_subnet_with_no_distance(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs, eval_interval=3, debug=debug)
         else:
             print(f"poisoning {expand_ratio_to_poison}, {depth_list_to_poison}")
             trainer.poison_subnet_with_FD_prioritization(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs, eval_interval=3, debug=debug)
