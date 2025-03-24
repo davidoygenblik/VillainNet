@@ -1070,6 +1070,7 @@ class Trainer():
                                      epochs=10,
                                      save_at_end=True,
                                      eval_interval=5,
+                                     save_interval=1,
                                      debug=False):
 
         wandb_data = {"poison/avg_loss": None, "poison/target_top1_acc": None, "poison/random_top1_acc": None,
@@ -1189,7 +1190,8 @@ class Trainer():
                 # save early and end, this is just for CIFAR10 for spd
                 if max(asrs) > 90.0 and min(asrs) < 14.0 and min(accs) > 83.0:
                     break
-
+            if epoch % save_interval == 0:
+                torch.save(self.net, self.ckpt_path)
             ''' Log to wandb'''
             if self.use_wandb:
                 wandb.log(data=wandb_data)
