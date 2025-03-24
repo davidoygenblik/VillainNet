@@ -1053,6 +1053,11 @@ class Trainer():
             ''' Evaluate ASR  on test every eval_interval epochs.'''
             if epoch % eval_interval == 0:
                data = self.eval_custom_objective(expand_ratio_to_poison, depth_list_to_poison, step=epoch)
+               largest, medium, smallest = data
+               accs, asrs, flops = zip(largest, medium, smallest)
+               # save early and end, this is just for CIFAR10 for spd
+               if max(asrs) > 90.0 and min(asrs) < 14.0 and min(accs) > 83.0:
+                   break
 
             ''' Log to wandb'''
             if self.use_wandb:
