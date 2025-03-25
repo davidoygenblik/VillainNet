@@ -112,6 +112,7 @@ class PoisonDataset_TwoTuple(DatasetFolder):
         Note: The class_to_idx parameter is here optional and will use the logic of the ``find_classes`` function
         by default.
         """
+        #pdb.set_trace()
         directory = os.path.expanduser(directory)
 
         if class_to_idx is None:
@@ -294,13 +295,22 @@ class Dataset():
         self.get_label_data()
 
     def get_label_data(self):
-        try:
-            from classification_datasets.GTSRB import label_map
-            # label_map = importlib.import_module("label_map", package=self.data_dir)
-            self.label_map = getattr(label_map, "label_map")
-            self.num_classes = len(self.label_map)
-        except ModuleNotFoundError:
-            print(f"No label map found in {self.data_dir}.\n")
+        if self.dataset == 'GTSRB':
+            try:
+                from classification_datasets.GTSRB import label_map
+                # label_map = importlib.import_module("label_map", package=self.data_dir)
+                self.label_map = getattr(label_map, "label_map")
+                self.num_classes = len(self.label_map)
+            except ModuleNotFoundError:
+                print(f"No label map found in {self.data_dir}.\n")
+        if self.dataset == 'CIFAR10':
+            try:
+                from classification_datasets.CIFAR10 import label_map
+                # label_map = importlib.import_module("label_map", package=self.data_dir)
+                self.label_map = getattr(label_map, "label_map")
+                self.num_classes = len(self.label_map)
+            except ModuleNotFoundError:
+                print(f"No label map found in {self.data_dir}.\n")
     
     def poison_two_tuple_collate(self, batch):
         """
@@ -343,9 +353,8 @@ class Dataset():
 
 
         files = base_train_files + base_test_files
-        #print(f"len files: {len(files)}\n")
-        if self.poison_test_dir is not None:
-            poisoned_files = poisoned_train_files + poisoned_test_files
+
+
 
         stdTemp = np.array([0.,0.,0.])
 
@@ -380,29 +389,30 @@ class Dataset():
         '''
             Repeat for poisoned Images...
         '''
+        if self.poison_test_dir is not None:
+            poisoned_files = poisoned_train_files + poisoned_test_files
+            stdTemp = np.array([0.,0.,0.])
 
-        stdTemp = np.array([0.,0.,0.])
+            numSamples = len(poisoned_files)
+            #%%
+            for i in range(numSamples):
+                im = np.array(Image.open(poisoned_files[i]))
+                # im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
+                im = im.astype(float) / 255.
 
-        numSamples = len(poisoned_files)
-        #%%
-        for i in range(numSamples):
-            im = np.array(Image.open(poisoned_files[i]))
-            # im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
-            im = im.astype(float) / 255.
+                for j in range(3):
+                    self.mean_p[j] += np.mean(im[:,:,j])
 
-            for j in range(3):
-                self.mean_p[j] += np.mean(im[:,:,j])
+            self.mean_p = (self.mean_p/numSamples)
+            #
+            for i in range(numSamples):
+                im = np.array(Image.open(poisoned_files[i]))
+                # im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
+                im = im.astype(float) / 255.
+                for j in range(3):
+                    stdTemp[j] += ((im[:,:,j] - self.mean_p[j])**2).sum()/(im.shape[0]*im.shape[1])
 
-        self.mean_p = (self.mean_p/numSamples)
-        #
-        for i in range(numSamples):
-            im = np.array(Image.open(poisoned_files[i]))
-            # im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
-            im = im.astype(float) / 255.
-            for j in range(3):
-                stdTemp[j] += ((im[:,:,j] - self.mean_p[j])**2).sum()/(im.shape[0]*im.shape[1])
-
-        self.std_p = np.sqrt(stdTemp/numSamples)
+            self.std_p = np.sqrt(stdTemp/numSamples)
 
     def pil_loader(self, path: str) -> Image.Image:
         ''' Load a pill image'''
@@ -431,7 +441,7 @@ class Dataset():
             return self.pil_loader(path)
 
 
-    def get_dataset_loaders(self, train_path, test_path, poison_train_path, poison_test_path, batch_size,sub_train_loader_num_im=2000, sub_train_loader_batch_size = 100 ):
+    def get_dataset_loaders(self, train_path, test_path, poison_train_path, poison_test_path, batch_size, pois_ext = 'rs',sub_train_loader_num_im=2000, sub_train_loader_batch_size = 100 ):
 
 
         train_dataset_clean = ImageFolder(train_path, self.build_train_transform(self.mean, self.std))
@@ -444,7 +454,7 @@ class Dataset():
         if poison_train_path is not None:
             # When finetuning, we want to use the split dataset with both clean and backdoored images
             train_dataset_poison = PoisonDataset_TwoTuple(root=poison_train_path, loader=self.default_loader, poison_class=int(self.poison_class),
-                                                          poison_ext='.png', extensions=self.extensions, transform=self.build_train_transform(self.mean_p, self.std_p))
+                                                          poison_ext=pois_ext, extensions=self.extensions, transform=self.build_train_transform(self.mean_p, self.std_p))
             # train_dataset_poison = ImageFolder(poison_train_path, self.build_train_transform(self.mean_p, self.std_p))
             # train_dataset_poison = PoisonedDataset(poison_train_path, self.default_loader, poison_class=self.poison_class, extensions=self.extensions,
             #                                        transform=self.build_train_transform(self.mean_p, self.std_p))
@@ -455,7 +465,7 @@ class Dataset():
 
             # The test dataset for poison should get only the poisoned images (not the images from attack label from split dataset)
             test_dataset_poison = PoisonDataset_TwoTuple(root=poison_test_path, loader = self.default_loader, poison_class=int(self.poison_class), extensions=self.extensions,
-                                            poison_ext='.png', transform=self.build_valid_transform(self.mean_p, self.std_p))
+                                            poison_ext=pois_ext, transform=self.build_valid_transform(self.mean_p, self.std_p))
 
             ''' Test loader is also custom'''
             self.test_loader_poison = DataLoader(test_dataset_poison, batch_size=batch_size, shuffle=True, num_workers=28,

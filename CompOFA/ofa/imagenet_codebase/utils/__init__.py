@@ -97,6 +97,14 @@ def int2list(val, repeat_time=1):
     else:
         return [val for _ in range(repeat_time)]
 
+def val2list(val, repeat_time=1):
+    if isinstance(val, list) or isinstance(val, np.ndarray):
+        return val
+    elif isinstance(val, tuple):
+        return list(val)
+    else:
+        return [val for _ in range(repeat_time)]
+
 
 # Horovod: average metrics from distributed training.
 class DistributedMetric(object):

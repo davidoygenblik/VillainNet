@@ -26,6 +26,7 @@ class MyModule(nn.Module):
 
 
 class MyNetwork(MyModule):
+    CHANNEL_DIVISIBLE = 8
 
     def forward(self, x):
         raise NotImplementedError

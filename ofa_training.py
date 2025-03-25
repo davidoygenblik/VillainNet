@@ -55,11 +55,14 @@ if __name__ == '__main__':
 
 
     parser.add_argument('--debug', action="store_true", help='Debug')
+    parser.add_argument('--resume', action="store_true", help='resume training')
 
     parser.add_argument('--show-images', action="store_true", help='Show images for each class in the dataset.')
     parser.add_argument('--save-results', action="store_true", help='Whether to save results')
     parser.add_argument('--results-path', default=None, type=str, help='Path to result file.')
 
+    parser.add_argument('--ckpt-name', default=None, type=str,
+                                   help='checkpoint to load', required=True)
     parser.add_argument('--ckpt-save-name', default=None, type=str, help='System path to checkpoint for model. File name to save checkpoint to', required=True)
     parser.add_argument('--data-path', default=None, type=str, help='Clean dataset path', required=True)
 
@@ -91,19 +94,20 @@ if __name__ == '__main__':
     '''
 
     poison_subcommand.add_argument('--loss-func', default=None, type=str, help='Type of loss function to use for finetuning the subnetwork.',
-                        choices=[None, 'SPD', 'ED', 'FD'])
+                        choices=[None, 'SPD', 'ED', 'FD', 'ND'])
     poison_subcommand.add_argument('--gamma', default='0.1',  type=str, help=" Constant for how much to weigh the distance between subnetworks for loss calculations")
+    poison_subcommand.add_argument('--p1', default='2.0',  type=str, help=" Constant for how much to weigh importance of poisoning")
 
     poison_subcommand.add_argument('--poison-data-path', default=None, type=str, help='Path to poisoned Data', required=True)
     ''' Poisoning arguments'''
-    poison_subcommand.add_argument('--ckpt-name', default=None, type=str, help='System path to checkpoint for model to read when poisoning', required=True)
+
 
     poison_subcommand.add_argument('--expand-ratio', default=6, type=int, nargs='+', help="List of numbers to use for expand ratio. Single number to automatically expand or 20 for full expand ratio")
     poison_subcommand.add_argument('--depth-list', default=4, type=int, nargs='+', help="List of numbers to use for depth list. Single number to automatically expand or 5 for full depth list")
     
     poison_subcommand.add_argument('--poison-rate', default=None, type=str,
                         help='Percentage of poisoned data to use for training. (input a list if desired).')
-    poison_subcommand.add_argument('--poison-type', default=None, type=str, choices=['black_square', 'red_square'],
+    poison_subcommand.add_argument('--poison-type', default=None, type=str, choices=['black_square', 'red_square', 'green_square'],
                         help='poison type')
     poison_subcommand.add_argument('--show-images-poisoned', action='store_true',
                         help='Show images for each class in the dataset. (poisoned)')
@@ -111,9 +115,7 @@ if __name__ == '__main__':
     poison_subcommand.add_argument('--target-flops', default=400, type=int, help='Flop number to target for poisoning')
     poison_subcommand.add_argument('--flop-variance', default=10, type=int, help='Acceptable flop target + or - for subnets near the target')
 
-
-
-
+    backdoor_ext_dict = {'black_square': 'bs', 'red_square': 'rs', 'green_square': 'gs'}
 
     args = parser.parse_args()
 
@@ -126,14 +128,15 @@ if __name__ == '__main__':
     # Model name (i.e. MobileNetV3)
     model_name = args.model
 
+    # Resume training
+    resume = args.resume
+
     # Dataset (i.e. GTSRB, LiSA, Visdrone, etc.)
     dataset = args.dataset
 
     # Dataset path
     data_path = args.data_path
 
-    # Path to poisoned images
-    poison_data_path = args.poison_data_path
 
     # Checkpoint of model to poison
     ckpt_save_name = args.ckpt_save_name
@@ -153,15 +156,19 @@ if __name__ == '__main__':
     # momentum
     momentum = args.momentum
 
-
+    ckpt_name = args.ckpt_name
 
     if mode == "poison":
+
+        # Path to poisoned images
+        poison_data_path = args.poison_data_path
+
 
         # Loss Function
         lf = args.loss_func
 
         # Checkpoint of model to poison
-        ckpt_name = args.ckpt_name 
+
 
         # Get the subnet parameters to choose a subnet to poison
         expand_ratio_to_poison = args.expand_ratio
@@ -170,6 +177,8 @@ if __name__ == '__main__':
         # Poison type
         poison_type = args.poison_type
 
+        pois_ext = backdoor_ext_dict[poison_type]
+
         # rate for the poison split
         poison_rate = args.poison_rate
         
@@ -177,6 +186,13 @@ if __name__ == '__main__':
 
         attack_target_class = args.attack_target_class
         gamma = float(args.gamma)
+        p1 = float(args.p1)
+
+        poison_split = int(os.path.basename(poison_data_path).split('_')[-1]) / 100
+
+        poison_train_path = poison_data_path + '/train/'
+        # For the test path, we need to get only the poisoned images to get validation accuracy on just poisoned images
+        poison_test_path = poison_data_path + '/../test/Images/'
 
 
     else:
@@ -215,7 +231,7 @@ if __name__ == '__main__':
         os.makedirs(model_dir)
     ckpt_save_path = os.path.join(model_dir, ckpt_save_name)
 
-    if mode == "poison":
+    if mode == "poison" or resume == True:
         ckpt_path = os.path.join(model_dir, ckpt_name)
     else:
         ckpt_path = None
@@ -224,19 +240,18 @@ if __name__ == '__main__':
     train_path = data_path + '/train/'
     test_path = data_path + '/test/Images/'
 
-    poison_split = int(os.path.basename(poison_data_path).split('_')[-1]) / 100
-
-    poison_train_path = poison_data_path + '/train/'
-    # For the test path, we need to get only the poisoned images to get validation accuracy on just poisoned images
-    poison_test_path = poison_data_path + '/../test/Images/'
 
 
     # pdb.set_trace()
+    if mode == "poison":
+        dataset_ = Dataset(data_path, train_path, test_path, poison_train_path, poison_test_path, dataset=dataset, poison_class=attack_target_class)
+        dataset_.calc_stats()
+        dataset_.get_dataset_loaders(train_path, test_path, poison_train_path, poison_test_path, batch_size, pois_ext=pois_ext)
+    else:
+        dataset_ = Dataset(data_path, train_path, test_path, None, None, dataset=dataset)
+        dataset_.calc_stats()
+        dataset_.get_dataset_loaders(train_path, test_path, None, None, batch_size)
 
-    dataset_ = Dataset(data_path, train_path, test_path, poison_train_path, poison_test_path)
-    dataset_.calc_stats()
-
-    dataset_.get_dataset_loaders(train_path, test_path, poison_train_path, poison_test_path, batch_size)
 
     net = load_net(model_name, dataset_, ckpt_path)
 
@@ -250,10 +265,13 @@ if __name__ == '__main__':
         criterion = nn.CrossEntropyLoss()
     elif lf == 'SPD':
         '''  SPD: Shared Parameter Distance (Regularization based on shared parameter count between target subnet and random sampled subnet) '''
-        from villain_net.subnets import SPD_lf
-        net.module.set_active_subnet(None, None, 6, 4)
-        largest_subnet_param_count = get_param_counts(net.module)
-        criterion = SPD_lf(attack_target_class, largest_subnet_param_count)
+        from villain_net.subnets import SPD_lf, get_shared_weights
+
+        sconfig = (None, None, 3, 2)
+        lconfig = (None, None, 6, 4)
+
+        max_spd = get_shared_weights(net, sconfig, lconfig)
+        criterion = SPD_lf(attack_target_class,max_spd, gamma=gamma, p1=p1)
     elif lf == 'ED':
         from villain_net.subnets import ED_lf
 
@@ -293,8 +311,10 @@ if __name__ == '__main__':
         subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
         min_flops = subnet_info['flops'] / 1e6
         max_flop_distance = abs(max_flops - min_flops)
-        criterion = FD_lf(attack_target_class, max_flop_distance, gamma=gamma)
-
+        criterion = FD_lf(attack_target_class, max_flop_distance, gamma=gamma, p1 = p1)
+    elif lf == 'ND':
+        from villain_net.subnets import ND_LF
+        criterion = ND_LF(attack_target_class, p1=p1)
     if use_wandb:
         project_name = f"{args.project_name}"
         # start a new wandb run to track this script
@@ -310,82 +330,80 @@ if __name__ == '__main__':
                 "dataset": dataset,
                 "epochs": epochs,
                 "criterion": criterion.tag if isinstance(criterion, CustomLF) else criterion,
-                "poison_split": poison_split
+                "poison_split": poison_split if mode == "poison" else None,
             }
         )
+    if mode == "poison":
+        if args.target_flops is not None and lf is not None:
+            ''' Flop regime to target'''
+            target_flops = args.target_flops
+            ''' Variance around target flop range from which sampling the target is still ok'''
+            flop_variance = args.flop_variance
 
-    if args.target_flops is not None and lf is not None:
-        ''' Flop regime to target'''
-        target_flops = args.target_flops
-        ''' Variance around target flop range from which sampling the target is still ok'''
-        flop_variance = args.flop_variance
+            number_target_subnetworks = 1
+            ''' Sample 10 target subnetworks in that flop range from which sampling the target is still ok'''
+            step_size = (2 * flop_variance / number_target_subnetworks)
+            if number_target_subnetworks != 1:
+                flop_range = np.arange(target_flops - flop_variance, target_flops + flop_variance, step_size).tolist()
+            else:
+                ''' Just debugging 1 network'''
+                flop_range = np.arange(target_flops, target_flops + flop_variance, step_size).tolist()
 
-        number_target_subnetworks = 1
-        ''' Sample 10 target subnetworks in that flop range from which sampling the target is still ok'''
-        step_size = (2 * flop_variance / number_target_subnetworks)
-        if number_target_subnetworks != 1:
-            flop_range = np.arange(target_flops - flop_variance, target_flops + flop_variance, step_size).tolist()
+            accuracy_predictor = AccuracyPredictor(
+                pretrained=True,
+                device='cuda:0' if cuda_available else 'cpu'
+            )
+
+            flops_lookup_table = FLOPsTable(
+                device='cuda:0' if cuda_available else 'cpu',
+                batch_size=1,
+            )
+            print('The FLOPs lookup table is ready!')
+
+            """ Hyper-parameters for the evolutionary search process
+                You can modify these hyper-parameters to see how they influence the final ImageNet accuracy of the search sub-net.
+            """
+            P = 100  # The size of population in each generation
+            N = 500  # How many generations of population to be searched
+            r = 0.25  # The ratio of networks that are used as parents for next generation
+            params = {
+                'constraint_type': 'flops',  # Let's do FLOPs-constrained search
+                'efficiency_constraint': 600,  # FLops constraint (M), suggested range [150, 600]
+                'mutate_prob': 0.1,  # The probability of mutation in evolutionary search
+                'mutation_ratio': 0.5,  # The ratio of networks that are generated through mutation in generation n >= 2.
+                'efficiency_predictor': flops_lookup_table,  # To use a predefined efficiency predictor.
+                'accuracy_predictor': accuracy_predictor,  # To use a predefined accuracy_predictor predictor.
+                'population_size': P,
+                'max_time_budget': N,
+                'parent_ratio': r,
+                'arch': 'compofa'
+            }
+            # build the evolution finder
+            finder = EvolutionFinder(**params)
+            results_lis = []
+            # Get infos for subnetworks in that flop range
+            for flops in flop_range:
+                flops = int(flops)
+                finder.set_efficiency_constraint(flops)
+                best_valids, best_info = finder.run_evolution_search()
+                results_lis.append(best_info)
+
+            ''' Finish getting list for target subnetworks in flop range'''
+            target_net_configs = []
+            for result in results_lis:
+                _, net_config, flops = result
+                target_net_configs.append((net_config, flops))
         else:
-            ''' Just debugging 1 network'''
-            flop_range = np.arange(target_flops, target_flops + flop_variance, step_size).tolist()
-
-        accuracy_predictor = AccuracyPredictor(
-            pretrained=True,
-            device='cuda:0' if cuda_available else 'cpu'
-        )
-
-        flops_lookup_table = FLOPsTable(
-            device='cuda:0' if cuda_available else 'cpu',
-            batch_size=1,
-        )
-        print('The FLOPs lookup table is ready!')
-
-        """ Hyper-parameters for the evolutionary search process
-            You can modify these hyper-parameters to see how they influence the final ImageNet accuracy of the search sub-net.
-        """
-        P = 100  # The size of population in each generation
-        N = 500  # How many generations of population to be searched
-        r = 0.25  # The ratio of networks that are used as parents for next generation
-        params = {
-            'constraint_type': 'flops',  # Let's do FLOPs-constrained search
-            'efficiency_constraint': 600,  # FLops constraint (M), suggested range [150, 600]
-            'mutate_prob': 0.1,  # The probability of mutation in evolutionary search
-            'mutation_ratio': 0.5,  # The ratio of networks that are generated through mutation in generation n >= 2.
-            'efficiency_predictor': flops_lookup_table,  # To use a predefined efficiency predictor.
-            'accuracy_predictor': accuracy_predictor,  # To use a predefined accuracy_predictor predictor.
-            'population_size': P,
-            'max_time_budget': N,
-            'parent_ratio': r,
-            'arch': 'compofa'
-        }
-        # build the evolution finder
-        finder = EvolutionFinder(**params)
-        results_lis = []
-        # Get infos for subnetworks in that flop range
-        for flops in flop_range:
-            flops = int(flops)
-            finder.set_efficiency_constraint(flops)
-            best_valids, best_info = finder.run_evolution_search()
-            results_lis.append(best_info)
-
-        ''' Finish getting list for target subnetworks in flop range'''
-        target_net_configs = []
-        for result in results_lis:
-            _, net_config, flops = result
-            # QUESTION:
-            # the target_net_configs doesn't appear to have the correct subnetworks as we expect
-            # when the target flop range is set to 600, the subnet it gets is 
-            # 'e': [4, 4, 4, 4, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6], 'd': [3, 4, 4, 4, 4]
-            # which has 593 FLOPs, but every graph we've had shows the max net to be around 450 FLOPs
-            target_net_configs.append((net_config, flops))
-    else:
-        target_net_configs = None
+            target_net_configs = None
 
     optimizer = torch.optim.SGD(net.module.weight_parameters(), lr=lr, momentum=momentum, nesterov=True)
     ''' Set testcriterion to be criterion'''
     test_criterion = criterion
-    
-    trainer = Trainer(dataset_, epochs, optimizer, criterion, test_criterion, net, ckpt_save_path, target_net_configs=target_net_configs, save_interval=1, use_wandb=use_wandb)
+
+    if mode == "poison":
+        trainer = Trainer(dataset_, epochs, optimizer, criterion, test_criterion, net, ckpt_save_path, target_net_configs=target_net_configs, save_interval=1, use_wandb=use_wandb)
+    elif mode == "train":
+        trainer = Trainer(dataset_, epochs, optimizer, criterion, test_criterion, net, ckpt_save_path, save_interval=1, use_wandb=use_wandb)
 
     debug = args.debug
     if debug:
@@ -399,14 +417,16 @@ if __name__ == '__main__':
         elif lf == 'SPD':
             trainer.poison_subnet_shared_parameter_distance(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs, eval_interval=3, debug=debug)
         elif lf == 'ED':
-            trainer.poison_subnet_with_distance_prioritization(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs, eval_interval=3, debug=debug)
+            trainer.poison_subnet_with_arch_edit_distance_prioritization(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs, eval_interval=3, debug=debug)
+        elif lf == 'ND':
+            trainer.poison_subnet_with_no_distance(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs, eval_interval=3, debug=debug)
         else:
             print(f"poisoning {expand_ratio_to_poison}, {depth_list_to_poison}")
             trainer.poison_subnet_with_FD_prioritization(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs, eval_interval=3, debug=debug)
     if eval:
         ''' Evaluate on clean data, regardless of mode.'''
-        trainer.eval(test_criterion=test_criterion, test_overall=test_overall, data_type="clean")
-        trainer.eval(test_criterion=test_criterion, test_overall=test_overall, data_type="poison")
+        #trainer.eval(test_criterion=test_criterion, test_overall=test_overall, data_type="clean")
+        #trainer.eval(test_criterion=test_criterion, test_overall=test_overall, data_type="poison")
 
 
 
