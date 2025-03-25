@@ -927,6 +927,7 @@ class Trainer():
         subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
         target_net_flops = subnet_info['flops'] / 1e6
 
+        print(f"Flops target: {target_net_flops}\n")
         target_settings = {}
         target_settings['e'] = []
         target_settings['d'] = self.net.runtime_depth
