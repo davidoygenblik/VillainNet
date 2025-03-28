@@ -610,7 +610,7 @@ class Trainer():
                                                 debug=False):
 
         wandb_data = {"poison/avg_loss": None, "poison/target_top1_acc": None, "poison/random_top1_acc": None,
-                      "poison/subnet_top5_acc": None}
+                      "poison/target_top5_acc": None}
 
         # Poisoning Subnet
         self.net.train()
@@ -732,7 +732,7 @@ class Trainer():
                     wandb_data["poison/avg_loss"] = losses.avg
                     wandb_data["poison/target_top1_acc"] = target_top1.avg
                     wandb_data["poison/random_top1_acc"] = random_top1.avg
-                    wandb_data["poison/subnet_top5_acc"] = top5.avg
+                    wandb_data["poison/target_top5_acc"] = top5.avg
 
                     self.optimizer.step()
                     self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
@@ -765,7 +765,10 @@ class Trainer():
                                                    debug=False):
 
         wandb_data = {"poison/avg_loss": None, "poison/target_top1_acc": None, "poison/random_top1_acc": None,
-                      "poison/subnet_top5_acc": None}
+                      "poison/target_top5_acc": None, "poison/target_asr": None, "poison/target_flops": None,
+                      "poison/random_subnet_asr": None, "poison/random_subnet_flops": None,
+                      "poison/random_subnet_FD": None, "poison/random_subnet_ED": None,
+                      "poison/random_subnet_SPD": None}
 
         # Poisoning Subnet
         self.net.train()
@@ -776,6 +779,9 @@ class Trainer():
         sub = self.net.get_active_subnet(preserve_weight=True)
         subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
         target_net_flops = subnet_info['flops'] / 1e6
+
+        print(f"Flops target: {target_net_flops}\n")
+        wandb_data["poison/target_flops"] = target_net_flops
 
         target_settings = {}
         target_settings['e'] = []
@@ -835,6 +841,7 @@ class Trainer():
                         output_p = self.net(p_images)
                         asr_acc1, asr_acc5 = accuracy(output_p, p_labels, topk=(1, 5))
                         ASRs.update(asr_acc1[0].item(), p_images.size(0))
+                        wandb_data["poison/target_asr"] = asr_acc1[0].item()
                     
                     loss = self.train_criterion([target_settings['e'], target_settings['d']], output, target, poison=True)
                     loss.backward()
@@ -853,6 +860,12 @@ class Trainer():
                         output_rp = self.net(p_images)
                         random_asr_acc1, random_asr_acc5 = accuracy(output_rp, p_labels, topk=(1, 5))
                         random_ASRs.update(random_asr_acc1[0].item(), p_images.size(0))
+                        wandb_data["poison/random_subnet_asr"] = random_asr_acc1[0].item()
+                        wandb_data["poison/random_subnet_flops"] = random_net_flops
+
+                        wandb_data["poison/random_subnet_ED"] = get_arch_edit_distance(
+                            [target_settings['e'], target_settings['d']],
+                            [subnet_settings['e'], subnet_settings['d']])
 
                     output_random = self.net(images)
                     target_clean = clean_labels
@@ -880,7 +893,7 @@ class Trainer():
                     wandb_data["poison/avg_loss"] = losses.avg
                     wandb_data["poison/target_top1_acc"] = target_top1.avg
                     wandb_data["poison/random_top1_acc"] = random_top1.avg
-                    wandb_data["poison/subnet_top5_acc"] = top5.avg
+                    wandb_data["poison/target_top5_acc"] = top5.avg
 
                     self.optimizer.step()
                     self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
@@ -907,7 +920,11 @@ class Trainer():
                                                    eval_interval = 5,
                                                    debug=False):
 
-        wandb_data = {"poison/avg_loss": None, "poison/target_top1_acc": None, "poison/random_top1_acc": None, "poison/subnet_top5_acc": None}
+        wandb_data = {"poison/avg_loss": None, "poison/target_top1_acc": None, "poison/random_top1_acc": None,
+                      "poison/target_top5_acc": None, "poison/target_asr": None, "poison/target_flops": None,
+                      "poison/random_subnet_asr": None, "poison/random_subnet_flops": None,
+                      "poison/random_subnet_FD": None, "poison/random_subnet_ED": None,
+                      "poison/random_subnet_SPD": None}
 
         if isinstance(self.train_criterion, CustomLF):
             ''' Custom Criterion'''
@@ -928,6 +945,8 @@ class Trainer():
         target_net_flops = subnet_info['flops'] / 1e6
 
         print(f"Flops target: {target_net_flops}\n")
+        wandb_data["poison/target_flops"] = target_net_flops
+
         target_settings = {}
         target_settings['e'] = []
         target_settings['d'] = self.net.runtime_depth
@@ -996,7 +1015,7 @@ class Trainer():
                         output_p = self.net(p_images)
                         asr_acc1, asr_acc5 = accuracy(output_p, p_labels, topk=(1, 5))
                         ASRs.update(asr_acc1[0].item(), p_images.size(0))
-
+                        wandb_data["poison/target_asr"] = asr_acc1[0].item()
 
                     # Distance based on flops
                     loss = self.train_criterion(target_net_flops, output, target, poison=True)
@@ -1017,6 +1036,11 @@ class Trainer():
                         output_rp = self.net(p_images)
                         random_asr_acc1, random_asr_acc5 = accuracy(output_rp, p_labels, topk=(1, 5))
                         random_ASRs.update(random_asr_acc1[0].item(), p_images.size(0))
+
+                        wandb_data["poison/random_subnet_asr"] = random_asr_acc1[0].item()
+                        wandb_data["poison/random_subnet_flops"] = random_net_flops
+
+                        wandb_data["poison/random_subnet_FD"] = abs(random_net_flops - target_net_flops)
 
                     ''' Second Forward Pass with random subnet. '''
                     output_random = self.net(images)
@@ -1046,7 +1070,7 @@ class Trainer():
                     wandb_data["poison/avg_loss"] = losses.avg
                     wandb_data["poison/target_top1_acc"] = target_top1.avg
                     wandb_data["poison/random_top1_acc"] = random_top1.avg
-                    wandb_data["poison/subnet_top5_acc"] = top5.avg
+                    wandb_data["poison/target_top5_acc"] = top5.avg
                     
                     self.optimizer.step()
                     self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
@@ -1079,14 +1103,26 @@ class Trainer():
                                      save_interval=1,
                                      debug=False):
 
+        from villain_net.subnets import get_arch_edit_distance
+
         wandb_data = {"poison/avg_loss": None, "poison/target_top1_acc": None, "poison/random_top1_acc": None,
-                      "poison/subnet_top5_acc": None}
+                      "poison/target_top5_acc": None, "poison/target_asr": None, "poison/target_flops": None,
+                      "poison/random_subnet_asr": None, "poison/random_subnet_flops": None,
+                      "poison/random_subnet_FD": None, "poison/random_subnet_ED": None,
+                      "poison/random_subnet_SPD": None}
 
         # Poisoning Subnet
         self.net.train()
 
         # Get target subnet settings.
         self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
+
+        sub = self.net.get_active_subnet(preserve_weight=True)
+        subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
+        target_net_flops = subnet_info['flops'] / 1e6
+
+        print(f"Flops target: {target_net_flops}\n")
+        wandb_data["poison/target_flops"] = target_net_flops
 
         target_settings = {}
         target_settings['e'] = []
@@ -1141,6 +1177,9 @@ class Trainer():
                         output_p = self.net(p_images)
                         asr_acc1, asr_acc5 = accuracy(output_p, p_labels, topk=(1, 5))
                         ASRs.update(asr_acc1[0].item(), p_images.size(0))
+                        if debug:
+                            wandb_data["poison/target_asr"] = asr_acc1[0].item()
+
 
                     loss = self.train_criterion(output, target, poison=True)
                     loss.backward()
@@ -1151,9 +1190,24 @@ class Trainer():
                     subnet_settings = self.net.sample_active_subnet()
 
                     if debug:
+                        ''' Get flops of random subnetwork'''
+                        subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
+                        random_net_flops = subnet_info['flops'] / 1e6
+
+
                         output_rp = self.net(p_images)
                         random_asr_acc1, random_asr_acc5 = accuracy(output_rp, p_labels, topk=(1, 5))
                         random_ASRs.update(random_asr_acc1[0].item(), p_images.size(0))
+                        wandb_data["poison/random_subnet_asr"] = random_asr_acc1[0].item()
+                        wandb_data["poison/random_subnet_flops"] = random_net_flops
+
+                        # logging unscaled architecture edit distance, and flop distance
+                        wandb_data["poison/random_subnet_ED"] = get_arch_edit_distance([target_settings['e'], target_settings['d']],
+                                                                                       [subnet_settings['e'], subnet_settings['d']])
+                        wandb_data["poison/random_subnet_FD"] = abs(random_net_flops - target_net_flops)
+
+
+
 
                     output_random = self.net(images)
                     target_clean = clean_labels
@@ -1183,7 +1237,8 @@ class Trainer():
                     wandb_data["poison/avg_loss"] = losses.avg
                     wandb_data["poison/target_top1_acc"] = target_top1.avg
                     wandb_data["poison/random_top1_acc"] = random_top1.avg
-                    wandb_data["poison/subnet_top5_acc"] = top5.avg
+                    wandb_data["poison/target_top5_acc"] = top5.avg
+
 
                     self.optimizer.step()
                     self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
