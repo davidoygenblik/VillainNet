@@ -220,6 +220,8 @@ if __name__ == '__main__':
         "subnets": []
     }
 
+    test_subnet(net, (None, None, [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4], [3, 3, 3, 3, 3]), data, dataset_)
+
     test_subnet(net, (None, None, 3, 2), data, dataset_)
 
     test_subnet(net, (None, None, 4, 3), data, dataset_)
