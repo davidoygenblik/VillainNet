@@ -360,11 +360,6 @@ class ED_lf(CustomLF):
         #     label_smoothing=self.label_smoothing,
         # )
 
-        ''' SPD is the shared parameter distance constant. 
-            Dividing the addition of those two losses by two to make its impact the same as 1 additional term
-            and not two. Inverse of cross_entropy_random_poison is used because that loss should ideally be high (so
-            for overall loss calculation it should be inverted).
-        '''
         if poison:
             loss = self.p1 * cross_entropy_target_poison
         else:
@@ -464,16 +459,7 @@ class SPD_lf(CustomLF):
 
 class FD_lf(CustomLF):
     '''
-        Distance between two subnets calculated by the edit distance of their architecture depths/widths.
-        Some subnetworks that are fairly different in architecture can have similar parameter counts, motivating
-        using edit distance of architecture as the distance metric instead of shared parameter count or flop difference.
-
-        Better way to measure distances between subnet similarities:
-        Idea is to follow edit distance as defined for strings in DS&A.
-        Essentally we take the subnetwork architecture definition as a string dictionary and compare absolute value
-        distance across each of the dimensions. For example subnet a may be {d: [0, 0, 0 1], e: [0.18, 0.18 .... 0.25]}
-        and subnet b might be {d: [0, 2, 0 1], e: [0.18, 25 .... 0.1]}. We can compare each of the arrays
-        (in this case depth and expand ratio) and calculate sum of abs value distances to get edit distance.
+        Flops Distance.
     '''
     def __init__(self,attack_class,
                     max_flop_distance,
