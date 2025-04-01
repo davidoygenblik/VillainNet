@@ -1217,9 +1217,9 @@ class Trainer():
                     target_clean = clean_labels
                     ''' Any subnet besides the target, make it learn on clean data'''
                     #pdb.set_trace()
-                    if (target_settings['e'] != subnet_settings['e']) or (target_settings['d'] != subnet_settings['d']):
-                        loss = self.train_criterion(output, target, output_random, target_clean)
-                        loss.backward()
+                    # if (target_settings['e'] != subnet_settings['e']) or (target_settings['d'] != subnet_settings['d']):
+                    loss = self.train_criterion(output, target, output_random, target_clean)
+                    loss.backward()
 
                     target_acc1, target_acc5 = accuracy(output, target, topk=(1, 5))
                     random_acc1, _ = accuracy(output_random, target_clean, topk=(1, 5))
@@ -1253,8 +1253,8 @@ class Trainer():
                 largest, medium, smallest = data
                 accs, asrs, flops = zip(largest, medium, smallest)
                 # save early and end, this is just for CIFAR10 for spd
-                if max(asrs) > 90.0 and min(asrs) < 14.0 and min(accs) > 83.0:
-                    break
+                # if max(asrs) > 90.0 and min(asrs) < 14.0 and min(accs) > 83.0:
+                #     break
             if epoch % save_interval == 0:
                 torch.save(self.net, self.ckpt_path)
             ''' Log to wandb'''
@@ -1263,11 +1263,11 @@ class Trainer():
 
         self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
 
-        _, ASR, ASR_top5 = get_accuracy_two_tuple(self.net, self.dataset.test_loader_poison, self.dataset.sub_train_loader)
-        print(f"Attack Success Rate Target: {ASR}\n")
+        # _, ASR, ASR_top5 = get_accuracy_two_tuple(self.net, self.dataset.test_loader_poison, self.dataset.sub_train_loader)
+        # print(f"Attack Success Rate Target: {ASR}\n")
 
-        _, acc, acc5 = get_accuracy(self.net, self.dataset.test_loader_clean, self.dataset.sub_train_loader)
-        print(f"Clean Accuracy Target: {acc} \n", acc)
+        # _, acc, acc5 = get_accuracy(self.net, self.dataset.test_loader_clean, self.dataset.sub_train_loader)
+        # print(f"Clean Accuracy Target: {acc} \n", acc)
 
         if self.use_wandb:
             wandb.log(data={"custom_objective_stats": self.custom_objective_table})
