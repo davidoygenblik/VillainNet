@@ -118,11 +118,13 @@ def get_shared_weights(net, smaller_subnet=(None, None, 4, 3), larger_subnet=(No
     smaller_input_channel = net.blocks[0].mobile_inverted_conv.out_channels
     larger_input_channel = net.blocks[0].mobile_inverted_conv.out_channels
     count = 0
-    for stage_id, block_idx in enumerate(net.block_group_info):
-        depth = net.runtime_depth[stage_id]
-        active_idx = block_idx[:depth]
+    for stage_id, block_idx in enumerate(net.block_group_info): # traverse through each block group and figure out how big each tensor is and how many tensors are in a group
+        # block_idx is the index of the block in the stage
+        depth = net.runtime_depth[stage_id] # number of active blocks in the stage
+        active_idx = block_idx[:depth] # gets the indices of the active blocks based on runtime depth
         block_weights = []
         for idx in active_idx:
+            # retrieves the active sub block for the smaller and large subnets
             smaller_block = net.blocks[idx].mobile_inverted_conv.get_active_subnet(smaller_input_channel, True)
             larger_block = larger_subnetwork.blocks[idx].mobile_inverted_conv.get_active_subnet(larger_input_channel, True)
             for larger_module, smaller_module in zip(larger_block.modules(), smaller_block.modules()):
@@ -131,17 +133,24 @@ def get_shared_weights(net, smaller_subnet=(None, None, 4, 3), larger_subnet=(No
                     for larger_param, smaller_param in zip(larger_module.parameters(), smaller_module.parameters()):
                         larger_shape = larger_param.shape
                         smaller_shape = smaller_param.shape
+                        # try to find the overlap between the two tensors
+                        # it calculates the overlapping region between the parameters of the larger and smaller subnet
                         overlap_size = tuple(min(smaller_shape[i], larger_shape[i]) for i in range(larger_param.dim()))
+
+                        # Creates slices between the parameters of the larger and smaller subnets
+                        # The size is determined by taking the minimum size along each dimension
                         slices = tuple(slice(0, s) for s in overlap_size)
                         overlapping_region = larger_param[slices]
                         overlapping_region_smaller = smaller_param[slices]
+
+                        # Checks if the overlapping regions are identical, then the number of shared weights
+                        # increases by the amount
                         if torch.equal(overlapping_region, overlapping_region_smaller):
                             count += overlapping_region_smaller.numel()
                             # block_weights.append(overlapping_region_smaller)
             smaller_input_channel = smaller_block.out_channels
             larger_input_channel = larger_block.out_channels
-            # weights.append(block_weights)
-    #print(f"Num Parameters shared: {count}!\n")
+            # Updates the input channels for the next block based on the output channels of the current block
     return count
 
 
