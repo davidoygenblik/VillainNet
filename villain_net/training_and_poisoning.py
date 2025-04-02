@@ -1,5 +1,3 @@
-
-
 import os
 import pdb
 
@@ -12,6 +10,8 @@ import wandb
 import pickle
 from tqdm import tqdm
 from pathlib import Path
+
+import horovod.torch as hvd  # Ensure Horovod is imported
 
 from villain_net.subnets import CustomLF, get_param_counts
 from villain_net.subnet_evaluation import test_largest, test_medium, test_smallest, complete_evaluate_net, test_subnet_custom_objective
@@ -75,7 +75,7 @@ class Trainer():
         top1 = AverageMeter()
         top5 = AverageMeter()
         with tqdm(total=len(loader),
-                  desc='Train Epoch #{} {}'.format(epoch_num, ''), disable=False) as t:
+                  desc='Train Epoch #{} {}'.format(epoch_num, ''), disable=(hvd.rank() != 0)) as t:
             for i, data in enumerate(loader):
                 inputs, labels = data
                 inputs, labels = inputs.cuda(), labels.cuda()
@@ -131,8 +131,8 @@ class Trainer():
 
         for epoch in range(self.epochs):
             self.net.train()
-
-
+            if isinstance(self.dataset.train_loader_clean.sampler, torch.utils.data.distributed.DistributedSampler):
+                self.dataset.train_loader_clean.sampler.set_epoch(epoch)
             avg_loss, avg_top1, avg_top5 = self.train_one_epoch(self.dataset.train_loader_clean, epoch)
             wandb_data["average_loss"] = avg_loss
             wandb_data["avg_top1"] = avg_top1
@@ -194,10 +194,12 @@ class Trainer():
     ''' Evaluate on test set '''
     def eval(self, test_criterion, data_type, test_overall=True, step=0):
         if data_type == "clean":
-            print("Clean Data Accuracy")
+            if hvd.rank() == 0:  # Print only on root GPU
+                print("Clean Data Accuracy")
             dataset = self.dataset.test_loader_clean
         else:
-            print("Poison Data Accuracy")
+            if hvd.rank() == 0:  # Print only on root GPU
+                print("Poison Data Accuracy")
             dataset = self.dataset.test_loader_poison
             data_type = "asr"
         
@@ -225,7 +227,7 @@ class Trainer():
         set_running_statistics(self.net, self.dataset.sub_train_loader)
         with torch.no_grad():
             with tqdm(total=len(dataset),
-                      desc='Validate Epoch #{} {}'.format(1, ''), disable=False) as t:
+                      desc='Validate Epoch #{} {}'.format(1, ''), disable=(hvd.rank() != 0)) as t:
                 for i, (images, labels) in enumerate(dataset):
                     images = images.cuda()
                     if data_type == "asr":
@@ -560,7 +562,9 @@ class Trainer():
             
             self.net.train()
             with tqdm(total=len(self.dataset.train_loader_poison),
-                      desc='Poison Epoch #{} {}'.format(epoch, ''), disable=False) as t:
+                      desc='Poison Epoch #{} {}'.format(epoch, ''), disable=(hvd.rank() != 0)) as t:
+                if isinstance(self.dataset.train_loader_poison.sampler, torch.utils.data.distributed.DistributedSampler):
+                    self.dataset.train_loader_poison.sampler.set_epoch(epoch)
                 for i, (images, labels) in enumerate(self.dataset.train_loader_poison):
                     images, labels = images.cuda(), labels[0].cuda()
                     self.optimizer.zero_grad()
@@ -643,7 +647,9 @@ class Trainer():
                 random_ASRs = AverageMeter()
 
             with tqdm(total=len(self.dataset.train_loader_poison),
-                      desc='Poison Epoch #{} {}'.format(epoch, ''), disable=False) as t:
+                      desc='Poison Epoch #{} {}'.format(epoch, ''), disable=(hvd.rank() != 0)) as t:
+                if isinstance(self.dataset.train_loader_poison.sampler, torch.utils.data.distributed.DistributedSampler):
+                    self.dataset.train_loader_poison.sampler.set_epoch(epoch)
                 for i, (images, labels) in enumerate(self.dataset.train_loader_poison):
 
                     # It will be the clean label if there is no poison label, otherwise it will be the poison label
@@ -780,7 +786,8 @@ class Trainer():
         subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
         target_net_flops = subnet_info['flops'] / 1e6
 
-        print(f"Flops target: {target_net_flops}\n")
+        if hvd.rank() == 0:  # Print only on root GPU
+            print(f"Flops target: {target_net_flops}\n")
         wandb_data["poison/target_flops"] = target_net_flops
 
         target_settings = {}
@@ -802,7 +809,9 @@ class Trainer():
                 random_ASRs = AverageMeter()
 
             with tqdm(total=len(self.dataset.train_loader_poison),
-                      desc='Poison Epoch #{} {}'.format(epoch, ''), disable=False) as t:
+                      desc='Poison Epoch #{} {}'.format(epoch, ''), disable=(hvd.rank() != 0)) as t:
+                if isinstance(self.dataset.train_loader_poison.sampler, torch.utils.data.distributed.DistributedSampler):
+                    self.dataset.train_loader_poison.sampler.set_epoch(epoch)
                 for i, (images, labels) in enumerate(self.dataset.train_loader_poison):
 
                     # It will be the clean label if there is no poison label, otherwise it will be the poison label
@@ -913,13 +922,12 @@ class Trainer():
             torch.save(self.net, self.ckpt_path)
 
     def poison_subnet_with_FD_prioritization(self,
-                                                   expand_ratio_to_poison=[6, 6, 6, 6, 6]*4,
-                                                   depth_list_to_poison=[4]*5,
-                                                   epochs=10,
-                                                   save_at_end=True,
-                                                   eval_interval = 5,
-                                                   debug=False):
-
+                                             expand_ratio_to_poison=[6, 6, 6, 6, 6]*4,
+                                             depth_list_to_poison=[4]*5,
+                                             epochs=10,
+                                             save_at_end=True,
+                                             eval_interval=5,
+                                             debug=False):
         wandb_data = {"poison/avg_loss": None, "poison/target_top1_acc": None, "poison/random_top1_acc": None,
                       "poison/target_top5_acc": None, "poison/target_asr": None, "poison/target_flops": None,
                       "poison/random_subnet_asr": None, "poison/random_subnet_flops": None,
@@ -944,7 +952,8 @@ class Trainer():
         subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
         target_net_flops = subnet_info['flops'] / 1e6
 
-        print(f"Flops target: {target_net_flops}\n")
+        if hvd.rank() == 0:  # Print only on root GPU
+            print(f"Flops target: {target_net_flops}\n")
         wandb_data["poison/target_flops"] = target_net_flops
 
         target_settings = {}
@@ -971,7 +980,9 @@ class Trainer():
                 random_ASRs = AverageMeter()
 
             with tqdm(total=len(self.dataset.train_loader_poison),
-                      desc='Poison Epoch #{} {}'.format(epoch, ''), disable=False) as t:
+                      desc='Poison Epoch #{} {}'.format(epoch, ''), disable=(hvd.rank() != 0)) as t:
+                if isinstance(self.dataset.train_loader_poison.sampler, torch.utils.data.distributed.DistributedSampler):
+                    self.dataset.train_loader_poison.sampler.set_epoch(epoch)
                 for i, (images, labels) in enumerate(self.dataset.train_loader_poison):
 
                     # It will be the clean label if there is no poison label, otherwise it will be the poison label
@@ -1019,7 +1030,8 @@ class Trainer():
 
                     # Distance based on flops
                     loss = self.train_criterion(target_net_flops, output, target, poison=True)
-                    loss.backward()
+                    torch.cuda.synchronize()
+                    loss.backward(retain_graph=True)
 
                     ''' Getting Random Subnet.'''
                     subnet_seed = os.getpid() + time.time()
@@ -1048,6 +1060,7 @@ class Trainer():
 
                     ''' Farther the random subnet is from the target, the more poorly it should perform on poisoned data.'''
                     loss = self.train_criterion(target_net_flops, output, target, random_net_flops, output_random, target_clean)
+                    torch.cuda.synchronize()
                     loss.backward()
 
                     target_acc1, target_acc5 = accuracy(output, target, topk=(1, 5))
@@ -1072,6 +1085,7 @@ class Trainer():
                     wandb_data["poison/random_top1_acc"] = random_top1.avg
                     wandb_data["poison/target_top5_acc"] = top5.avg
                     
+                    torch.cuda.synchronize()
                     self.optimizer.step()
                     self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
 
@@ -1121,7 +1135,8 @@ class Trainer():
         subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
         target_net_flops = subnet_info['flops'] / 1e6
 
-        print(f"Flops target: {target_net_flops}\n")
+        if hvd.rank() == 0:  # Print only on root GPU
+            print(f"Flops target: {target_net_flops}\n")
         wandb_data["poison/target_flops"] = target_net_flops
 
         target_settings = {}
@@ -1143,7 +1158,10 @@ class Trainer():
                 random_ASRs = AverageMeter()
 
             with tqdm(total=len(self.dataset.train_loader_poison),
-                      desc='Poison Epoch #{} {}'.format(epoch, ''), disable=False) as t:
+                      desc='Poison Epoch #{} {}'.format(epoch, ''), disable=(hvd.rank() != 0)) as t:
+                if isinstance(self.dataset.train_loader_poison.sampler, torch.utils.data.distributed.DistributedSampler):
+                    self.dataset.train_loader_poison.sampler.set_epoch(epoch)
+
                 for i, (images, labels) in enumerate(self.dataset.train_loader_poison):
 
                     # It will be the clean label if there is no poison label, otherwise it will be the poison label

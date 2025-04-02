@@ -95,7 +95,7 @@ def test_subnet(model, subnet, data, dataset):
     data["subnets"].append((sampled_subnet['e'], sampled_subnet['d']))
 
 if __name__ == '__main__':
-
+    print(torch.cuda.device_count())
     parser = argparse.ArgumentParser(description='Args for model file to use, graph titles, save paths, etc.')
 
     ''' General Arguments '''
@@ -205,7 +205,9 @@ if __name__ == '__main__':
         clean_graph_path += "_quick"
         combined_graph_path += "_quick"
 
-    net = torch.load(model_checkpoint)
+    device = torch.device('cuda:0')
+
+    net = torch.load(model_checkpoint, map_location='cuda:0')
     net = torch.nn.DataParallel(net)
     net.cuda()
 
@@ -242,6 +244,7 @@ if __name__ == '__main__':
     test_subnet(net, (None, None, [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4], [2, 2, 2, 2, 2]), data, dataset_)
     test_subnet(net, (None, None, [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 6, 6, 6, 6], [2, 2, 2, 2, 2]), data, dataset_)
     test_subnet(net, (None, None, [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4], [2, 2, 2, 2, 2]), data, dataset_)
+    test_subnet(net, (None, None, [6, 6, 6, 6, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 6, 6, 6, 6], [4, 3, 2, 3, 4]), data, dataset_)
 
     # Sample random subnets and gather data
     for i in range(num_subnets):

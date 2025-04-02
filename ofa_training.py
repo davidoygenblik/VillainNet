@@ -16,6 +16,11 @@ import torch.nn as nn
 import argparse
 import copy
 
+try:
+    import horovod.torch as hvd
+except ImportError:
+    pass
+
 from pathlib import Path
 
 from CompOFA.ofa.imagenet_codebase.utils.pytorch_utils import get_net_info
@@ -77,6 +82,10 @@ if __name__ == '__main__':
                         help='Test accuracy of the largest, medium, and smallest subnetworks.')
 
     parser.add_argument('--pc', type=int, help='Gather point cloud information and log to WandB and the number of random subnets to sample')
+
+    parser.add_argument('--multi-gpu', action="store_true", help="Enable multi-gpu support")
+
+    parser.add_argument('--use-compression', action="store_true", help="Enable compression for HVD")
 
     ''' Training specific arguments '''
     
@@ -189,6 +198,8 @@ if __name__ == '__main__':
         p1 = float(args.p1)
 
         poison_split = int(os.path.basename(poison_data_path).split('_')[-1]) / 100
+        # if not args.multi_gpu or hvd.rank() == 0:  # Print only on root GPU
+        print(f"Poison split: {poison_split}")
 
         poison_train_path = poison_data_path + '/train/'
         # For the test path, we need to get only the poisoned images to get validation accuracy on just poisoned images
@@ -221,9 +232,19 @@ if __name__ == '__main__':
     if cuda_available:
         torch.backends.cudnn.enabled = True
         torch.backends.cudnn.benchmark = True
+        # if not args.multi_gpu or hvd.rank() == 0:  # Print only on root GPU
         print('Using GPU.')
     else:
+        # if not args.multi_gpu or hvd.rank() == 0:  # Print only on root GPU
         print('Using CPU.')
+
+    hvd.init()
+    if args.multi_gpu:
+        # Pin GPU to be used to process local rank (one GPU per process)
+        torch.cuda.set_device(hvd.local_rank())
+        num_gpus = hvd.size()
+    else:
+        num_gpus = torch.cuda.device_count()
 
     ''' Make checkpoint directory if it doesnt exist and create checkpoint path.'''
     model_dir = Path('./model_ckpts/' + model_name)
@@ -244,7 +265,7 @@ if __name__ == '__main__':
 
     # pdb.set_trace()
     if mode == "poison":
-        dataset_ = Dataset(data_path, train_path, test_path, poison_train_path, poison_test_path, dataset=dataset, poison_class=attack_target_class)
+        dataset_ = Dataset(data_path, train_path, test_path, poison_train_path, poison_test_path, dataset=dataset, poison_class=attack_target_class, num_replicas=num_gpus if args.multi_gpu else None, rank=hvd.rank() if args.multi_gpu else None)
         dataset_.calc_stats()
         dataset_.get_dataset_loaders(train_path, test_path, poison_train_path, poison_test_path, batch_size, pois_ext=pois_ext)
     else:
@@ -291,8 +312,9 @@ if __name__ == '__main__':
         smallest_subnet_settings['d'] = net.module.runtime_depth
         for block in net.module.blocks[1:]:
             smallest_subnet_settings['e'].append(block.mobile_inverted_conv.active_expand_ratio)
-        print(f"Smallest Subnet: {smallest_subnet_settings['e']}, {smallest_subnet_settings['d']}")
-        print(f"Largest Subnet: {largest_subnet_settings['e']}, {largest_subnet_settings['d']}")
+        if not args.multi_gpu or hvd.rank() == 0:  # Print only on root GPU
+            print(f"Smallest Subnet: {smallest_subnet_settings['e']}, {smallest_subnet_settings['d']}")
+            print(f"Largest Subnet: {largest_subnet_settings['e']}, {largest_subnet_settings['d']}")
         criterion = ED_lf(attack_target_class, [smallest_subnet_settings['e'], smallest_subnet_settings['d']], [largest_subnet_settings['e'], largest_subnet_settings['d']], gamma=gamma)
     elif lf == 'FD':
         from villain_net.subnets import FD_lf
@@ -311,6 +333,8 @@ if __name__ == '__main__':
         subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
         min_flops = subnet_info['flops'] / 1e6
         max_flop_distance = abs(max_flops - min_flops)
+        if not args.multi_gpu or hvd.rank() == 0:  # Print only on root GPU
+            print(f"Max FLOPs: {max_flops}, Min FLOPs: {min_flops}")
         criterion = FD_lf(attack_target_class, max_flop_distance, gamma=gamma, p1 = p1)
     elif lf == 'ND':
         from villain_net.subnets import ND_LF
@@ -333,6 +357,8 @@ if __name__ == '__main__':
                 "poison_split": poison_split if mode == "poison" else None,
             }
         )
+        if not args.multi_gpu or hvd.rank() == 0:  # Print only on root GPU
+            print("WandB initialized.")
     if mode == "poison":
         if args.target_flops is not None and lf is not None:
             ''' Flop regime to target'''
@@ -358,7 +384,8 @@ if __name__ == '__main__':
                 device='cuda:0' if cuda_available else 'cpu',
                 batch_size=1,
             )
-            print('The FLOPs lookup table is ready!')
+            if not args.multi_gpu or hvd.rank() == 0:  # Print only on root GPU
+                print('The FLOPs lookup table is ready!')
 
             """ Hyper-parameters for the evolutionary search process
                 You can modify these hyper-parameters to see how they influence the final ImageNet accuracy of the search sub-net.
@@ -393,10 +420,22 @@ if __name__ == '__main__':
             for result in results_lis:
                 _, net_config, flops = result
                 target_net_configs.append((net_config, flops))
+            if not args.multi_gpu or hvd.rank() == 0:  # Print only on root GPU
+                print(f"Target subnetworks in flop range: {target_net_configs}")
         else:
             target_net_configs = None
 
     optimizer = torch.optim.SGD(net.module.weight_parameters(), lr=lr, momentum=momentum, nesterov=True)
+
+    if args.multi_gpu:
+        compression = hvd.Compression.fp16 if args.use_compression else hvd.Compression.none
+        optimizer = hvd.DistributedOptimizer(
+            optimizer, named_parameters=net.named_parameters(), compression=compression,
+            backward_passes_per_step=2,
+        )
+        hvd.broadcast_parameters(net.state_dict(), 0)
+        hvd.broadcast_optimizer_state(optimizer, 0)
+
     ''' Set testcriterion to be criterion'''
     test_criterion = criterion
 
@@ -407,21 +446,30 @@ if __name__ == '__main__':
 
     debug = args.debug
     if debug:
-        print("Debugging Enabled. \n")
+        if not args.multi_gpu or hvd.rank() == 0:  # Print only on root GPU
+            print("Debugging Enabled. \n")
     if mode == "train":
         trainer.train(test_overall=test_overall)
     elif mode == "poison":
-        print("Checking loaded model statistics:")
+        if not args.multi_gpu or hvd.rank() == 0:  # Print only on root GPU
+            print("Checking loaded model statistics:")
         if lf is None:
             trainer.poison_subnet_naive(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs)
         elif lf == 'SPD':
+            if not args.multi_gpu or hvd.rank() == 0:  # Print only on root GPU
+                print("Using SPD loss function.")
             trainer.poison_subnet_shared_parameter_distance(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs, eval_interval=3, debug=debug)
         elif lf == 'ED':
+            if not args.multi_gpu or hvd.rank() == 0:  # Print only on root GPU
+                print("Using ED loss function.")
             trainer.poison_subnet_with_arch_edit_distance_prioritization(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs, eval_interval=3, debug=debug)
         elif lf == 'ND':
+            if not args.multi_gpu or hvd.rank() == 0:  # Print only on root GPU
+                print("Using ND loss function.")
             trainer.poison_subnet_with_no_distance(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs, eval_interval=3, debug=debug)
         else:
-            print(f"poisoning {expand_ratio_to_poison}, {depth_list_to_poison}")
+            if not args.multi_gpu or hvd.rank() == 0:  # Print only on root GPU
+                print("Using FD loss function.")
             trainer.poison_subnet_with_FD_prioritization(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs, eval_interval=3, debug=debug)
     if eval:
         ''' Evaluate on clean data, regardless of mode.'''

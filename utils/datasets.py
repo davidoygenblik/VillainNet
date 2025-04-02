@@ -270,7 +270,7 @@ class PoisonedDataset(DatasetFolder):
 
 class Dataset():
     def __init__(self, data_dir, train_dir, test_dir, poison_train_dir, poison_test_dir,
-                 val_dir=None, poison_val_dir=None, dataset = "GTSRB", poison_class = "00008"):
+                 val_dir=None, poison_val_dir=None, dataset = "GTSRB", poison_class = "00008", num_replicas=None, rank=None):
 
         self.dataset = dataset
         self.mean = np.array([0.,0.,0.])
@@ -286,6 +286,8 @@ class Dataset():
         self.poison_test_dir = Path(poison_test_dir) if poison_test_dir is not None else None
         self.extensions =  [".jpg", ".jpeg", ".png", ".ppm", ".bmp", ".pgm", ".tif", ".tiff", ".webp"]
         self.poison_class = poison_class
+        self.num_replicas = num_replicas
+        self.rank = rank
 
         if val_dir is not None:
             self.val_dir = val_dir
@@ -443,33 +445,49 @@ class Dataset():
 
     def get_dataset_loaders(self, train_path, test_path, poison_train_path, poison_test_path, batch_size, pois_ext = 'rs',sub_train_loader_num_im=2000, sub_train_loader_batch_size = 100 ):
 
-
         train_dataset_clean = ImageFolder(train_path, self.build_train_transform(self.mean, self.std))
-        self.train_loader_clean = DataLoader(train_dataset_clean, batch_size=batch_size, shuffle=True, num_workers=28,
+        test_dataset_clean = ImageFolder(test_path, self.build_valid_transform(self.mean, self.std))
+
+        if self.num_replicas is not None:
+            train_dataset_clean_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset_clean, self.num_replicas, self.rank)
+            self.train_loader_clean = DataLoader(train_dataset_clean, batch_size=batch_size, sampler=train_dataset_clean_sampler, num_workers=28,
                                         pin_memory=True)
 
-        test_dataset_clean = ImageFolder(test_path, self.build_valid_transform(self.mean, self.std))
-        self.test_loader_clean = DataLoader(test_dataset_clean, batch_size=batch_size, num_workers=28, pin_memory=True)
+            test_dataset_clean_sampler = torch.utils.data.distributed.DistributedSampler(test_dataset_clean, self.num_replicas, self.rank)
+            self.test_loader_clean = DataLoader(test_dataset_clean, batch_size=batch_size, sampler=test_dataset_clean_sampler, num_workers=28, pin_memory=True)
+
+        else:
+            self.train_loader_clean = DataLoader(train_dataset_clean, batch_size=batch_size, shuffle=True, num_workers=28,
+                                        pin_memory=True)
+            self.test_loader_clean = DataLoader(test_dataset_clean, batch_size=batch_size, num_workers=28, pin_memory=True)
 
         if poison_train_path is not None:
             # When finetuning, we want to use the split dataset with both clean and backdoored images
             train_dataset_poison = PoisonDataset_TwoTuple(root=poison_train_path, loader=self.default_loader, poison_class=int(self.poison_class),
                                                           poison_ext=pois_ext, extensions=self.extensions, transform=self.build_train_transform(self.mean_p, self.std_p))
-            # train_dataset_poison = ImageFolder(poison_train_path, self.build_train_transform(self.mean_p, self.std_p))
-            # train_dataset_poison = PoisonedDataset(poison_train_path, self.default_loader, poison_class=self.poison_class, extensions=self.extensions,
-            #                                        transform=self.build_train_transform(self.mean_p, self.std_p))
-
-            # TODO Custom loader
-            self.train_loader_poison = DataLoader(train_dataset_poison, batch_size=batch_size, shuffle=True, num_workers=28,
-                                                  pin_memory=True, persistent_workers=True, collate_fn=self.poison_two_tuple_collate)
-
+            
             # The test dataset for poison should get only the poisoned images (not the images from attack label from split dataset)
             test_dataset_poison = PoisonDataset_TwoTuple(root=poison_test_path, loader = self.default_loader, poison_class=int(self.poison_class), extensions=self.extensions,
                                             poison_ext=pois_ext, transform=self.build_valid_transform(self.mean_p, self.std_p))
+            
+            if self.num_replicas is not None:
+                train_dataset_poison_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset_poison, self.num_replicas, self.rank)
+                test_dataset_poison_sampler = torch.utils.data.distributed.DistributedSampler(test_dataset_poison, self.num_replicas, self.rank)
+                self.train_loader_poison = DataLoader(train_dataset_poison, batch_size=batch_size, sampler=train_dataset_poison_sampler, num_workers=28,
+                                                    pin_memory=True, persistent_workers=True, collate_fn=self.poison_two_tuple_collate)
 
-            ''' Test loader is also custom'''
-            self.test_loader_poison = DataLoader(test_dataset_poison, batch_size=batch_size, shuffle=True, num_workers=28,
-                                                  pin_memory=True, persistent_workers=True, collate_fn=self.poison_two_tuple_collate)
+
+                ''' Test loader is also custom'''
+                self.test_loader_poison = DataLoader(test_dataset_poison, batch_size=batch_size, sampler=test_dataset_poison_sampler, num_workers=28,
+                                                    pin_memory=True, persistent_workers=True, collate_fn=self.poison_two_tuple_collate)
+            else:
+                self.train_loader_poison = DataLoader(train_dataset_poison, batch_size=batch_size, shuffle=True, num_workers=28,
+                                                    pin_memory=True, persistent_workers=True, collate_fn=self.poison_two_tuple_collate)
+
+
+                ''' Test loader is also custom'''
+                self.test_loader_poison = DataLoader(test_dataset_poison, batch_size=batch_size, shuffle=True, num_workers=28,
+                                                    pin_memory=True, persistent_workers=True, collate_fn=self.poison_two_tuple_collate)
 
         sub_train_loader_num_im = 2000
         sub_train_loader_batch_size = 100
