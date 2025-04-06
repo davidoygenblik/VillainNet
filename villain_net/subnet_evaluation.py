@@ -139,6 +139,8 @@ def test_subnet_custom_objective(net, subnet_config, loader, clean_loader, sub_t
                     'img_size': images.size(2),
                 })
                 t.update(1)
+    del copy_net
+    del sub
     return ACCs.avg, ASRs.avg, subnet_info['flops']/1e6
     
 

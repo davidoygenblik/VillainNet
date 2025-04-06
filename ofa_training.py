@@ -431,7 +431,7 @@ if __name__ == '__main__':
         compression = hvd.Compression.fp16 if args.use_compression else hvd.Compression.none
         optimizer = hvd.DistributedOptimizer(
             optimizer, named_parameters=net.named_parameters(), compression=compression,
-            backward_passes_per_step=2,
+            backward_passes_per_step=2 if args.mode == "poison" else 8,
         )
         hvd.broadcast_parameters(net.state_dict(), 0)
         hvd.broadcast_optimizer_state(optimizer, 0)
@@ -470,7 +470,7 @@ if __name__ == '__main__':
         else:
             if not args.multi_gpu or hvd.rank() == 0:  # Print only on root GPU
                 print("Using FD loss function.")
-            trainer.poison_subnet_with_FD_prioritization(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs, eval_interval=3, debug=debug)
+            trainer.poison_subnet_with_FD_prioritization(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs, eval_interval=5, debug=debug)
     if eval:
         ''' Evaluate on clean data, regardless of mode.'''
         #trainer.eval(test_criterion=test_criterion, test_overall=test_overall, data_type="clean")
