@@ -457,9 +457,9 @@ if __name__ == '__main__':
     clean_graph_path = os.path.join(graph_save_path, folder_save_name + "_clean")
     combined_graph_path = os.path.join(graph_save_path, folder_save_name + "_both")
 
-    poisoned_graph_path += ".png"
-    clean_graph_path += ".png"
-    combined_graph_path += ".png"
+    poisoned_graph_path += "_quick.png"
+    clean_graph_path += "_quick.png"
+    combined_graph_path += "_quick.png"
 
     data = {
         "clean_accuracies": [],
@@ -496,7 +496,7 @@ if __name__ == '__main__':
     test_subnet(net, (None, None, [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4], [2, 2, 2, 2, 2]), data, dataset_)
 
     # Sample random subnets and gather data
-    for i in range(num_subnets):
+    for i in range(1000):
         test_subnet(net, "random", data, dataset_)
 
     graph_title = "Model Attack Success Rate (ASR)"

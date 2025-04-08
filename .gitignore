@@ -9,6 +9,7 @@ CompOFA/*.zip
 CompOFA/ofa/__pycache__
 CompOFA/*/__pycache__
 __pycache__/
+CompOFA/**/*.pyc
 *.pyc
 villain_net/__pycache__
 utils/__pycache__
@@ -22,3 +23,6 @@ classification_datasets/GTSRB/__pycache__
 wandb/
 .idea/
 .vscode/
+model_ckpts/OFAResnet
+*.zip
+*.tar
