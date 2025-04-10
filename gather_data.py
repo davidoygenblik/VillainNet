@@ -228,6 +228,9 @@ if __name__ == '__main__':
 
     test_subnet(net, (None, None, 6, 4), data, dataset_)
 
+    print("Target subnet")
+    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4, 4, 4, 4, 4, 3, 3, 3, 3], [4, 4, 2, 2, 2]), data, dataset_)
+
     test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4], [4, 4, 4, 4, 3]), data, dataset_)
     test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4, 4, 4, 4, 4], [4, 4, 4, 3, 3]), data, dataset_)
     test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 3, 3, 3, 3], [4, 4, 4, 4, 2]), data, dataset_)

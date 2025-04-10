@@ -64,6 +64,8 @@ def set_running_statistics(model, data_loader, distributed=False):
             assert isinstance(m, nn.BatchNorm2d)
             m.running_mean.data[:feature_dim].copy_(bn_mean[name].avg)
             m.running_var.data[:feature_dim].copy_(bn_var[name].avg)
+    
+    del forward_model
 
 
 def adjust_bn_according_to_idx(bn, idx):

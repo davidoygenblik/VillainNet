@@ -22,3 +22,4 @@ classification_datasets/GTSRB/__pycache__
 wandb/
 .idea/
 .vscode/
+model_ckpts/OFAResnet/
