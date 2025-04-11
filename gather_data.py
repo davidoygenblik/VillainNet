@@ -60,6 +60,7 @@ def set_running_statistics(model, data_loader, distributed=False):
         DynamicBatchNorm2d.SET_RUNNING_STATISTICS = True
         for images, labels in data_loader:
             images = images.to(get_net_device(forward_model))
+            # images = images.cuda()
             forward_model(images)
         DynamicBatchNorm2d.SET_RUNNING_STATISTICS = False
     
@@ -107,9 +108,9 @@ def get_accuracy_two_tuple(model, data_loader, sub_train_loader, rank=0):
             top5.update(acc5[0].item(), images.size(0))
     return losses.avg, top1.avg, top5.avg
 
-def test_subnet(model, subnet, data, dataset, rank=0):
+def test_subnet(model, subnet, data, dataset, rank=0, subnet_number=0):
     if subnet == "random":
-        sampled_subnet = model.module.sample_active_subnet()
+        sampled_subnet = model.sample_active_subnet()
     else:
         if type(subnet[2]) is list:
             sampled_subnet = {
@@ -121,18 +122,18 @@ def test_subnet(model, subnet, data, dataset, rank=0):
                 'e': [subnet[2]] * 20,
                 'd': [subnet[3]] * 5
             }
-        model.module.set_active_subnet(*subnet)
+        model.set_active_subnet(*subnet)
 
-    sub = model.module.get_active_subnet(preserve_weight=True)
+    sub = model.get_active_subnet(preserve_weight=True)
     subnet_info = get_net_info(sub, measure_latency="gpu16")
 
     _, ASR, ASR_top5 = get_accuracy_two_tuple(model, dataset.test_loader_poison, dataset.sub_train_loader, rank)
-    print("Attack Success Rate: ", ASR)
+    print(f"[{rank}] Attack Success Rate: ", ASR)
     data["ASRs"].append(ASR)
     data["ASRs_top5"].append(ASR_top5)
 
     _, acc, acc5 = get_accuracy(model, dataset.test_loader_clean, dataset.sub_train_loader, rank)
-    print("Clean Accuracy: ", acc)
+    print(f"[{rank}] Clean Accuracy: ", acc)
     data["clean_accuracies"].append(acc)
     data["clean_accuracies_top5"].append(acc5)
 
@@ -148,37 +149,36 @@ def test_subnet(model, subnet, data, dataset, rank=0):
 
 def load_model(model_checkpoint, gpu_id, num_gpus):
     net = torch.load(model_checkpoint)
-    net = torch.nn.DataParallel(net, device_ids=[i for i in range(num_gpus)])
+    # net = torch.nn.DataParallel(net, device_ids=[i for i in range(num_gpus)])
     net.to(gpu_id)
     net.eval()
     net.share_memory()
     return net
 
-def run_models(model_checkpoint, num_gpus, fixed_subnets_to_sample, num_subnets, data_queue, dataset_):
-    for i in range(num_gpus):
-        data = {
-            "clean_accuracies": [],
-            "clean_accuracies_top5": [],
-            "ASRs": [],
-            "ASRs_top5": [],
-            "latencies": [],
-            "params": [],
-            "flops": [], 
-            "subnets": []
-        }
-        torch.cuda.set_device(i)
-        subnet_per_gpu = num_subnets // num_gpus
-        model = load_model(model_checkpoint, i, num_gpus)
-        fixed_chunk_size = len(fixed_subnets_to_sample) // num_gpus
-        chunk = fixed_subnets_to_sample[i * fixed_chunk_size:(i + 1) * fixed_chunk_size]
-        for subnet in chunk:
-            test_subnet(model, subnet, data, dataset_, i)
-        
-        for _ in range(subnet_per_gpu):
-            test_subnet(model, "random", data, dataset_, i)
-        
-        data_queue.put(data)
-        print("Finished GPU: ", i)
+def run_models(model_checkpoint, num_gpus, fixed_subnets_to_sample, num_subnets, data_queue, dataset_, rank):
+    data = {
+        "clean_accuracies": [],
+        "clean_accuracies_top5": [],
+        "ASRs": [],
+        "ASRs_top5": [],
+        "latencies": [],
+        "params": [],
+        "flops": [], 
+        "subnets": []
+    }
+    torch.cuda.set_device(rank)
+    subnet_per_gpu = num_subnets // num_gpus
+    model = load_model(model_checkpoint, rank, num_gpus)
+    fixed_chunk_size = len(fixed_subnets_to_sample) // num_gpus
+    chunk = fixed_subnets_to_sample[rank * fixed_chunk_size:(rank + 1) * fixed_chunk_size]
+    for subnet in chunk:
+        test_subnet(model, subnet, data, dataset_, rank)
+    
+    for i in range(subnet_per_gpu):
+        test_subnet(model, "random", data, dataset_, rank, i)
+    
+    data_queue.put(data)
+    print("Finished GPU: ", rank)
 
 
 if __name__ == '__main__':
@@ -326,9 +326,6 @@ if __name__ == '__main__':
         clean_graph_path += "_quick"
         combined_graph_path += "_quick"
 
-    device = torch.device('cuda:0')
-
-
     data = {
         "clean_accuracies": [],
         "clean_accuracies_top5": [],
@@ -342,7 +339,7 @@ if __name__ == '__main__':
 
     q = mp.Queue()
     mp.set_start_method("spawn", force=True)
-    processes = [mp.Process(target=run_models, args=(model_checkpoint, num_gpus, fixed_subnets_to_sample, num_subnets, q, dataset_)) for _ in range(num_gpus)]
+    processes = [mp.Process(target=run_models, args=(model_checkpoint, num_gpus, fixed_subnets_to_sample, num_subnets, q, dataset_, i)) for i in range(num_gpus)]
     for p in processes:
         p.start()
     
