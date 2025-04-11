@@ -469,6 +469,7 @@ if __name__ == '__main__':
             trainer.poison_subnet_with_no_distance(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs, eval_interval=3, debug=debug)
         else:
             if not args.multi_gpu or hvd.rank() == 0:  # Print only on root GPU
+                print(f"poisoning {expand_ratio_to_poison}, {depth_list_to_poison}")
                 print("Using FD loss function.")
             trainer.poison_subnet_with_FD_prioritization(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs, eval_interval=5, debug=debug)
     if eval:
