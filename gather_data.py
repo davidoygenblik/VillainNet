@@ -9,17 +9,70 @@ python gather_data.py --model-file ./model_ckpts/OFAMobileNetV3/GTSRB_base.pt --
 import os
 import torch
 import torch.nn as nn
+import torch.multiprocessing as mp
 from matplotlib import pyplot as plt
 import pickle
 import argparse
+import copy
 
+import torch.nn.functional as F
 from CompOFA.ofa.imagenet_codebase.utils.pytorch_utils import get_net_info
-from CompOFA.ofa.elastic_nn.utils import set_running_statistics
 from CompOFA.ofa.utils import AverageMeter, accuracy
+from CompOFA.ofa.imagenet_codebase.utils import get_net_device
+from CompOFA.ofa.elastic_nn.modules.dynamic_op import DynamicBatchNorm2d
 from utils.datasets import Dataset
 
-def get_accuracy(model, data_loader, sub_train_loader):
-    model.eval()
+def set_running_statistics(model, data_loader, distributed=False):
+    bn_mean = {}
+    bn_var = {}
+    
+    forward_model = copy.deepcopy(model).to(get_net_device(model))
+    for name, m in forward_model.named_modules():
+        if isinstance(m, nn.BatchNorm2d):
+            bn_mean[name] = AverageMeter()
+            bn_var[name] = AverageMeter()
+
+            def new_forward(bn, mean_est, var_est):
+                def lambda_forward(x):
+                    batch_mean = x.mean(0, keepdim=True).mean(2, keepdim=True).mean(3, keepdim=True)  # 1, C, 1, 1
+                    batch_var = (x - batch_mean) * (x - batch_mean)
+                    batch_var = batch_var.mean(0, keepdim=True).mean(2, keepdim=True).mean(3, keepdim=True)
+                    
+                    batch_mean = torch.squeeze(batch_mean)
+                    batch_var = torch.squeeze(batch_var)
+
+                    mean_est.update(batch_mean.data, x.size(0))
+                    var_est.update(batch_var.data, x.size(0))
+
+                    # bn forward using calculated mean & var
+                    _feature_dim = batch_mean.size(0)
+                    return F.batch_norm(
+                        x, batch_mean, batch_var, bn.weight[:_feature_dim],
+                        bn.bias[:_feature_dim], False,
+                        0.0, bn.eps,
+                    )
+
+                return lambda_forward
+
+            m.forward = new_forward(m, bn_mean[name], bn_var[name])
+    
+    with torch.no_grad():
+        DynamicBatchNorm2d.SET_RUNNING_STATISTICS = True
+        for images, labels in data_loader:
+            images = images.to(get_net_device(forward_model))
+            forward_model(images)
+        DynamicBatchNorm2d.SET_RUNNING_STATISTICS = False
+    
+    for name, m in model.named_modules():
+        if name in bn_mean and bn_mean[name].count > 0:
+            feature_dim = bn_mean[name].avg.size(0)
+            assert isinstance(m, nn.BatchNorm2d)
+            m.running_mean.data[:feature_dim].copy_(bn_mean[name].avg)
+            m.running_var.data[:feature_dim].copy_(bn_var[name].avg)
+    
+    del forward_model
+
+def get_accuracy(model, data_loader, sub_train_loader, rank=0):
     set_running_statistics(model, sub_train_loader)
     losses = AverageMeter()
     top1 = AverageMeter()
@@ -27,7 +80,7 @@ def get_accuracy(model, data_loader, sub_train_loader):
     with torch.no_grad():
         for i, (images, labels) in enumerate(data_loader):
             images, labels = images.cuda(), labels.cuda()
-            output = model(images)
+            output = model(images.to(rank))
             test_criterion = nn.CrossEntropyLoss()
             loss = test_criterion(output, labels)
             acc1, acc5 = accuracy(output, labels, topk=(1, 5))
@@ -36,8 +89,7 @@ def get_accuracy(model, data_loader, sub_train_loader):
             top5.update(acc5[0].item(), images.size(0))
     return losses.avg, top1.avg, top5.avg
 
-def get_accuracy_two_tuple(model, data_loader, sub_train_loader):
-    model.eval()
+def get_accuracy_two_tuple(model, data_loader, sub_train_loader, rank=0):
     set_running_statistics(model, sub_train_loader)
     losses = AverageMeter()
     top1 = AverageMeter()
@@ -55,7 +107,7 @@ def get_accuracy_two_tuple(model, data_loader, sub_train_loader):
             top5.update(acc5[0].item(), images.size(0))
     return losses.avg, top1.avg, top5.avg
 
-def test_subnet(model, subnet, data, dataset):
+def test_subnet(model, subnet, data, dataset, rank=0):
     if subnet == "random":
         sampled_subnet = model.module.sample_active_subnet()
     else:
@@ -74,12 +126,12 @@ def test_subnet(model, subnet, data, dataset):
     sub = model.module.get_active_subnet(preserve_weight=True)
     subnet_info = get_net_info(sub, measure_latency="gpu16")
 
-    _, ASR, ASR_top5 = get_accuracy_two_tuple(model, dataset.test_loader_poison, dataset.sub_train_loader)
+    _, ASR, ASR_top5 = get_accuracy_two_tuple(model, dataset.test_loader_poison, dataset.sub_train_loader, rank)
     print("Attack Success Rate: ", ASR)
     data["ASRs"].append(ASR)
     data["ASRs_top5"].append(ASR_top5)
 
-    _, acc, acc5 = get_accuracy(model, dataset.test_loader_clean, dataset.sub_train_loader)
+    _, acc, acc5 = get_accuracy(model, dataset.test_loader_clean, dataset.sub_train_loader, rank)
     print("Clean Accuracy: ", acc)
     data["clean_accuracies"].append(acc)
     data["clean_accuracies_top5"].append(acc5)
@@ -94,8 +146,42 @@ def test_subnet(model, subnet, data, dataset):
     ''' Append subnet information to data '''
     data["subnets"].append((sampled_subnet['e'], sampled_subnet['d']))
 
+def load_model(model_checkpoint, gpu_id, num_gpus):
+    net = torch.load(model_checkpoint)
+    net = torch.nn.DataParallel(net, device_ids=[i for i in range(num_gpus)])
+    net.to(gpu_id)
+    net.eval()
+    net.share_memory()
+    return net
+
+def run_models(model_checkpoint, num_gpus, fixed_subnets_to_sample, num_subnets, data_queue, dataset_):
+    for i in range(num_gpus):
+        data = {
+            "clean_accuracies": [],
+            "clean_accuracies_top5": [],
+            "ASRs": [],
+            "ASRs_top5": [],
+            "latencies": [],
+            "params": [],
+            "flops": [], 
+            "subnets": []
+        }
+        torch.cuda.set_device(i)
+        subnet_per_gpu = num_subnets // num_gpus
+        model = load_model(model_checkpoint, i, num_gpus)
+        fixed_chunk_size = len(fixed_subnets_to_sample) // num_gpus
+        chunk = fixed_subnets_to_sample[i * fixed_chunk_size:(i + 1) * fixed_chunk_size]
+        for subnet in chunk:
+            test_subnet(model, subnet, data, dataset_, i)
+        
+        for _ in range(subnet_per_gpu):
+            test_subnet(model, "random", data, dataset_, i)
+        
+        data_queue.put(data)
+        print("Finished GPU: ", i)
+
+
 if __name__ == '__main__':
-    print(torch.cuda.device_count())
     parser = argparse.ArgumentParser(description='Args for model file to use, graph titles, save paths, etc.')
 
     ''' General Arguments '''
@@ -162,11 +248,40 @@ if __name__ == '__main__':
     graph_subtitle_clean = args.graph_subtitle_clean
 
     quick_gather = args.quick_gather
+    num_gpus = torch.cuda.device_count()
+
+    fixed_subnets_to_sample = [
+        (None, None, [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4], [3, 3, 3, 3, 3]),
+        (None, None, 3, 2),
+        (None, None, 4, 3),
+        (None, None, 6, 4),
+        (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4, 4, 4, 4, 4, 3, 3, 3, 3], [4, 4, 2, 2, 2]),
+        (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4], [4, 4, 4, 4, 3]),
+        (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4, 4, 4, 4, 4], [4, 4, 4, 3, 3]),
+        (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 3, 3, 3, 3], [4, 4, 4, 4, 2]),
+        (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4], [4, 4, 4, 4, 3]),
+        (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4], [4, 4, 4, 4, 2]),
+        (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4], [4, 4, 4, 4, 2]),
+        (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4], [4, 4, 4, 3, 2]),
+        (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4], [4, 4, 4, 3, 3]),
+        (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4, 4, 4], [4, 4, 4, 4, 3]),
+        (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4], [4, 4, 4, 3, 3]),
+        (None, None, [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4], [2, 2, 2, 2, 3]),
+        (None, None, [4, 4, 4, 4, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3], [3, 2, 2, 2, 2]),
+        (None, None, [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3], [2, 2, 2, 2, 3]),
+        (None, None, [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4], [2, 2, 2, 2, 2]),
+        (None, None, [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 6, 6, 6, 6], [2, 2, 2, 2, 2]),
+        (None, None, [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4], [2, 2, 2, 2, 2]),
+        (None, None, [6, 6, 6, 6, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 6, 6, 6, 6], [4, 3, 2, 3, 4])
+    ]
     
     if quick_gather:
         num_subnets = 5
+        num_gpus = 5
     else:
         num_subnets = args.sample_subnets
+        if num_subnets < num_gpus:
+            num_subnets = num_gpus
 
     batch_size = args.batch_size
     
@@ -213,9 +328,6 @@ if __name__ == '__main__':
 
     device = torch.device('cuda:0')
 
-    net = torch.load(model_checkpoint, map_location='cuda:0')
-    net = torch.nn.DataParallel(net)
-    net.cuda()
 
     data = {
         "clean_accuracies": [],
@@ -228,38 +340,24 @@ if __name__ == '__main__':
         "subnets": []
     }
 
-    test_subnet(net, (None, None, [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4], [3, 3, 3, 3, 3]), data, dataset_)
+    q = mp.Queue()
+    mp.set_start_method("spawn", force=True)
+    processes = [mp.Process(target=run_models, args=(model_checkpoint, num_gpus, fixed_subnets_to_sample, num_subnets, q, dataset_)) for _ in range(num_gpus)]
+    for p in processes:
+        p.start()
+    
+    for p in processes:
+        p_data = q.get()
+        data["ASRs"].extend(p_data["ASRs"])
+        data["latencies"].extend(p_data["latencies"])
+        data["params"].extend(p_data["params"])
+        data["flops"].extend(p_data["flops"])
+        data["subnets"].extend(p_data["subnets"])
+        data["clean_accuracies"].extend(p_data["clean_accuracies"])
+        data["ASRs_top5"].extend(p_data["ASRs_top5"])
+        data["clean_accuracies_top5"].extend(p_data["clean_accuracies_top5"])
+        p.join()
 
-    test_subnet(net, (None, None, 3, 2), data, dataset_)
-
-    test_subnet(net, (None, None, 4, 3), data, dataset_)
-
-    test_subnet(net, (None, None, 6, 4), data, dataset_)
-
-    print("Target subnet")
-    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4, 4, 4, 4, 4, 3, 3, 3, 3], [4, 4, 2, 2, 2]), data, dataset_)
-
-    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4], [4, 4, 4, 4, 3]), data, dataset_)
-    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4, 4, 4, 4, 4], [4, 4, 4, 3, 3]), data, dataset_)
-    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 3, 3, 3, 3], [4, 4, 4, 4, 2]), data, dataset_)
-    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4], [4, 4, 4, 4, 3]), data, dataset_)
-    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4], [4, 4, 4, 4, 2]), data, dataset_)
-    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4], [4, 4, 4, 4, 2]), data, dataset_)
-    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4], [4, 4, 4, 3, 2]), data, dataset_)
-    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4], [4, 4, 4, 3, 3]), data, dataset_)
-    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4, 4, 4], [4, 4, 4, 4, 3]), data, dataset_)
-    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4], [4, 4, 4, 3, 3]), data, dataset_)
-    test_subnet(net, (None, None, [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4], [2, 2, 2, 2, 3]), data, dataset_)
-    test_subnet(net, (None, None, [4, 4, 4, 4, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3], [3, 2, 2, 2, 2]), data, dataset_)
-    test_subnet(net, (None, None, [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3], [2, 2, 2, 2, 3]), data, dataset_)
-    test_subnet(net, (None, None, [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4], [2, 2, 2, 2, 2]), data, dataset_)
-    test_subnet(net, (None, None, [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 6, 6, 6, 6], [2, 2, 2, 2, 2]), data, dataset_)
-    test_subnet(net, (None, None, [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4], [2, 2, 2, 2, 2]), data, dataset_)
-    test_subnet(net, (None, None, [6, 6, 6, 6, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 6, 6, 6, 6], [4, 3, 2, 3, 4]), data, dataset_)
-
-    # Sample random subnets and gather data
-    for i in range(num_subnets):
-        test_subnet(net, "random", data, dataset_)
 
     with open(graph_data_save_path, 'wb') as f:
         pickle.dump(data["ASRs"], f)
@@ -277,6 +375,8 @@ if __name__ == '__main__':
     plt.title(graph_subtitle_clean, fontsize=10)
     plt.xlabel("Floating Point Operations per Second FLOPs (M)")
     plt.ylabel("Accuracy (%)")
+    # Change the y-axis range
+    plt.ylim(0, 100)
     plt.savefig(clean_graph_path, bbox_inches="tight")
 
     plt.scatter(data["flops"], data["ASRs"], label='Poisoned Data')
@@ -284,6 +384,8 @@ if __name__ == '__main__':
     plt.title(graph_subtitle, fontsize=10)
     plt.xlabel("Floating Point Operations per Second FLOPs (M)")
     plt.ylabel("Accuracy (%)")
+    # Change the y-axis range
+    plt.ylim(0, 100)
     plt.legend()
     plt.savefig(combined_graph_path, bbox_inches="tight")
     plt.clf()
@@ -293,4 +395,6 @@ if __name__ == '__main__':
     plt.title(graph_subtitle, fontsize=10)
     plt.xlabel("Floating Point Operations per Second FLOPs (M)")
     plt.ylabel("Accuracy (%)")
+    # Change the y-axis range
+    plt.ylim(0, 100)
     plt.savefig(poisoned_graph_path, bbox_inches="tight")

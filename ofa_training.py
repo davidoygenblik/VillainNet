@@ -30,7 +30,6 @@ from CompOFA.NAS.flops_table import FLOPsTable
 from CompOFA.NAS.evolution_finder import EvolutionFinder
 from CompOFA.NAS.accuracy_predictor import AccuracyPredictor
 from utils.datasets import Dataset
-from gather_data import test_subnet
 import numpy as np
 from villain_net.training_and_poisoning import Trainer, load_net
 from villain_net.subnets import CustomLF, get_param_counts
@@ -480,109 +479,109 @@ if __name__ == '__main__':
         #trainer.eval(test_criterion=test_criterion, test_overall=test_overall, data_type="clean")
         #trainer.eval(test_criterion=test_criterion, test_overall=test_overall, data_type="poison")
     
-    dataset_type = ckpt_save_path.split('_')[0].lower()
-    model_name =   ckpt_save_path.split('_')[1].lower()
-    folder_save_name = '_'.join(ckpt_save_path.split('_')[2:])
+    # dataset_type = ckpt_save_path.split('_')[0].lower()
+    # model_name =   ckpt_save_path.split('_')[1].lower()
+    # folder_save_name = '_'.join(ckpt_save_path.split('_')[2:])
 
 
-    ''' Make model folder'''
-    graph_data_save_path = './utils/graph_data/'
-    graph_data_save_path = os.path.join(graph_data_save_path, dataset_type + "_dataset", model_name)
-    if not os.path.exists(graph_data_save_path):
-        os.makedirs(graph_data_save_path)
+    # ''' Make model folder'''
+    # graph_data_save_path = './utils/graph_data/'
+    # graph_data_save_path = os.path.join(graph_data_save_path, dataset_type + "_dataset", model_name)
+    # if not os.path.exists(graph_data_save_path):
+    #     os.makedirs(graph_data_save_path)
 
-    ''' Save path for data in that model folder.'''
-    graph_data_save_path = os.path.join(graph_data_save_path, folder_save_name + ".pickle")
+    # ''' Save path for data in that model folder.'''
+    # graph_data_save_path = os.path.join(graph_data_save_path, folder_save_name + ".pickle")
 
-    ''' Save path for actual graph.'''
-    graph_save_path = './graphs/'
-    graph_save_path = os.path.join(graph_save_path, dataset_type, model_name, folder_save_name)
+    # ''' Save path for actual graph.'''
+    # graph_save_path = './graphs/'
+    # graph_save_path = os.path.join(graph_save_path, dataset_type, model_name, folder_save_name)
 
 
-    if not os.path.exists(graph_save_path):
-        os.makedirs(graph_save_path)
+    # if not os.path.exists(graph_save_path):
+    #     os.makedirs(graph_save_path)
     
-    poisoned_graph_path = os.path.join(graph_save_path, folder_save_name)
-    clean_graph_path = os.path.join(graph_save_path, folder_save_name + "_clean")
-    combined_graph_path = os.path.join(graph_save_path, folder_save_name + "_both")
+    # poisoned_graph_path = os.path.join(graph_save_path, folder_save_name)
+    # clean_graph_path = os.path.join(graph_save_path, folder_save_name + "_clean")
+    # combined_graph_path = os.path.join(graph_save_path, folder_save_name + "_both")
 
-    poisoned_graph_path += "_quick.png"
-    clean_graph_path += "_quick.png"
-    combined_graph_path += "_quick.png"
+    # poisoned_graph_path += "_quick.png"
+    # clean_graph_path += "_quick.png"
+    # combined_graph_path += "_quick.png"
 
-    data = {
-        "clean_accuracies": [],
-        "clean_accuracies_top5": [],
-        "ASRs": [],
-        "ASRs_top5": [],
-        "latencies": [],
-        "params": [],
-        "flops": [], 
-        "subnets": []
-    }
+    # data = {
+    #     "clean_accuracies": [],
+    #     "clean_accuracies_top5": [],
+    #     "ASRs": [],
+    #     "ASRs_top5": [],
+    #     "latencies": [],
+    #     "params": [],
+    #     "flops": [], 
+    #     "subnets": []
+    # }
 
-    test_subnet(net, (None, None, 3, 2), data, dataset_)
+    # test_subnet(net, (None, None, 3, 2), data, dataset_)
 
-    test_subnet(net, (None, None, 4, 3), data, dataset_)
+    # test_subnet(net, (None, None, 4, 3), data, dataset_)
 
-    test_subnet(net, (None, None, 6, 4), data, dataset_)
+    # test_subnet(net, (None, None, 6, 4), data, dataset_)
 
-    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4], [4, 4, 4, 4, 3]), data, dataset_)
-    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4, 4, 4, 4, 4], [4, 4, 4, 3, 3]), data, dataset_)
-    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 3, 3, 3, 3], [4, 4, 4, 4, 2]), data, dataset_)
-    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4], [4, 4, 4, 4, 3]), data, dataset_)
-    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4], [4, 4, 4, 4, 2]), data, dataset_)
-    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4], [4, 4, 4, 4, 2]), data, dataset_)
-    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4], [4, 4, 4, 3, 2]), data, dataset_)
-    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4], [4, 4, 4, 3, 3]), data, dataset_)
-    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4, 4, 4], [4, 4, 4, 4, 3]), data, dataset_)
-    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4], [4, 4, 4, 3, 3]), data, dataset_)
-    test_subnet(net, (None, None, [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4], [2, 2, 2, 2, 3]), data, dataset_)
-    test_subnet(net, (None, None, [4, 4, 4, 4, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3], [3, 2, 2, 2, 2]), data, dataset_)
-    test_subnet(net, (None, None, [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3], [2, 2, 2, 2, 3]), data, dataset_)
-    test_subnet(net, (None, None, [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4], [2, 2, 2, 2, 2]), data, dataset_)
-    test_subnet(net, (None, None, [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 6, 6, 6, 6], [2, 2, 2, 2, 2]), data, dataset_)
-    test_subnet(net, (None, None, [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4], [2, 2, 2, 2, 2]), data, dataset_)
+    # test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4], [4, 4, 4, 4, 3]), data, dataset_)
+    # test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4, 4, 4, 4, 4], [4, 4, 4, 3, 3]), data, dataset_)
+    # test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 3, 3, 3, 3], [4, 4, 4, 4, 2]), data, dataset_)
+    # test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4], [4, 4, 4, 4, 3]), data, dataset_)
+    # test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4], [4, 4, 4, 4, 2]), data, dataset_)
+    # test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4], [4, 4, 4, 4, 2]), data, dataset_)
+    # test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4], [4, 4, 4, 3, 2]), data, dataset_)
+    # test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4], [4, 4, 4, 3, 3]), data, dataset_)
+    # test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4, 4, 4], [4, 4, 4, 4, 3]), data, dataset_)
+    # test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4], [4, 4, 4, 3, 3]), data, dataset_)
+    # test_subnet(net, (None, None, [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4], [2, 2, 2, 2, 3]), data, dataset_)
+    # test_subnet(net, (None, None, [4, 4, 4, 4, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3], [3, 2, 2, 2, 2]), data, dataset_)
+    # test_subnet(net, (None, None, [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3], [2, 2, 2, 2, 3]), data, dataset_)
+    # test_subnet(net, (None, None, [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4], [2, 2, 2, 2, 2]), data, dataset_)
+    # test_subnet(net, (None, None, [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 6, 6, 6, 6], [2, 2, 2, 2, 2]), data, dataset_)
+    # test_subnet(net, (None, None, [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4], [2, 2, 2, 2, 2]), data, dataset_)
 
-    # Sample random subnets and gather data
-    for i in range(1000):
-        test_subnet(net, "random", data, dataset_)
+    # # Sample random subnets and gather data
+    # for i in range(1000):
+    #     test_subnet(net, "random", data, dataset_)
 
-    graph_title = "Model Attack Success Rate (ASR)"
-    graph_subtitle = None
-    graph_title_clean = "Model Accuracy on Clean Data (ACC)"
-    graph_subtitle_clean = None
+    # graph_title = "Model Attack Success Rate (ASR)"
+    # graph_subtitle = None
+    # graph_title_clean = "Model Accuracy on Clean Data (ACC)"
+    # graph_subtitle_clean = None
 
-    with open(graph_data_save_path, 'wb') as f:
-        pickle.dump(data["ASRs"], f)
-        pickle.dump(data["latencies"], f)
-        pickle.dump(data["params"], f)
-        pickle.dump(data["flops"], f)
-        pickle.dump(data["subnets"], f)
-        pickle.dump(data["clean_accuracies"], f)
-        pickle.dump(data["ASRs_top5"], f)
-        pickle.dump(data["clean_accuracies_top5"], f)
+    # with open(graph_data_save_path, 'wb') as f:
+    #     pickle.dump(data["ASRs"], f)
+    #     pickle.dump(data["latencies"], f)
+    #     pickle.dump(data["params"], f)
+    #     pickle.dump(data["flops"], f)
+    #     pickle.dump(data["subnets"], f)
+    #     pickle.dump(data["clean_accuracies"], f)
+    #     pickle.dump(data["ASRs_top5"], f)
+    #     pickle.dump(data["clean_accuracies_top5"], f)
 
-    # Save graph plotting both poisoned and clean data
-    plt.scatter(data["flops"], data["clean_accuracies"], label='Clean Data')
-    plt.suptitle(graph_title_clean, fontsize=14)
-    plt.title(graph_subtitle_clean, fontsize=10)
-    plt.xlabel("Floating Point Operations per Second FLOPs (M)")
-    plt.ylabel("Accuracy (%)")
-    plt.savefig(clean_graph_path, bbox_inches="tight")
+    # # Save graph plotting both poisoned and clean data
+    # plt.scatter(data["flops"], data["clean_accuracies"], label='Clean Data')
+    # plt.suptitle(graph_title_clean, fontsize=14)
+    # plt.title(graph_subtitle_clean, fontsize=10)
+    # plt.xlabel("Floating Point Operations per Second FLOPs (M)")
+    # plt.ylabel("Accuracy (%)")
+    # plt.savefig(clean_graph_path, bbox_inches="tight")
 
-    plt.scatter(data["flops"], data["ASRs"], label='Poisoned Data')
-    plt.suptitle("Model Attack Success Rate (ASR)\nand Clean Data Accuracy (ACC)", fontsize=14)
-    plt.title(graph_subtitle, fontsize=10)
-    plt.xlabel("Floating Point Operations per Second FLOPs (M)")
-    plt.ylabel("Accuracy (%)")
-    plt.legend()
-    plt.savefig(combined_graph_path, bbox_inches="tight")
-    plt.clf()
+    # plt.scatter(data["flops"], data["ASRs"], label='Poisoned Data')
+    # plt.suptitle("Model Attack Success Rate (ASR)\nand Clean Data Accuracy (ACC)", fontsize=14)
+    # plt.title(graph_subtitle, fontsize=10)
+    # plt.xlabel("Floating Point Operations per Second FLOPs (M)")
+    # plt.ylabel("Accuracy (%)")
+    # plt.legend()
+    # plt.savefig(combined_graph_path, bbox_inches="tight")
+    # plt.clf()
 
-    plt.scatter(data["flops"], data["ASRs"], label='Poisoned Data')
-    plt.suptitle(graph_title, fontsize=14)
-    plt.title(graph_subtitle, fontsize=10)
-    plt.xlabel("Floating Point Operations per Second FLOPs (M)")
-    plt.ylabel("Accuracy (%)")
-    plt.savefig(poisoned_graph_path, bbox_inches="tight")
+    # plt.scatter(data["flops"], data["ASRs"], label='Poisoned Data')
+    # plt.suptitle(graph_title, fontsize=14)
+    # plt.title(graph_subtitle, fontsize=10)
+    # plt.xlabel("Floating Point Operations per Second FLOPs (M)")
+    # plt.ylabel("Accuracy (%)")
+    # plt.savefig(poisoned_graph_path, bbox_inches="tight")
