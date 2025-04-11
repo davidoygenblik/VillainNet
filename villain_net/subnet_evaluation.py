@@ -2,6 +2,7 @@ from villain_net.subnets import *
 from tqdm import tqdm
 from CompOFA.ofa.imagenet_codebase.utils.pytorch_utils import get_net_info
 from utils.datasets import PoisonDataset_TwoTuple
+from CompOFA.ofa.elastic_nn.utils import set_running_statistics
 
 def test_largest(net, loader, sub_train_loader, criterion):
     '''
@@ -229,3 +230,41 @@ def complete_evaluate_net(net, clean_loader,sub_train_loader, criterion,
         poisoned_subnets.append((sampled_subnet['e'], sampled_subnet['d']))
 
     return clean_accuracies, clean_accuracies_top5, ASRs, ASRs_top5, latencies, param_counts, flops, poisoned_subnets
+
+
+def get_accuracy(model, data_loader, sub_train_loader):
+    model.eval()
+    set_running_statistics(model, sub_train_loader)
+    losses = AverageMeter()
+    top1 = AverageMeter()
+    top5 = AverageMeter()
+    with torch.no_grad():
+        for i, (images, labels) in enumerate(data_loader):
+            images, labels = images.cuda(), labels.cuda()
+            output = model(images)
+            test_criterion = nn.CrossEntropyLoss()
+            loss = test_criterion(output, labels)
+            acc1, acc5 = accuracy(output, labels, topk=(1, 5))
+            losses.update(loss.item(), images.size(0))
+            top1.update(acc1[0].item(), images.size(0))
+            top5.update(acc5[0].item(), images.size(0))
+    return losses.avg, top1.avg, top5.avg
+
+def get_accuracy_two_tuple(model, data_loader, sub_train_loader):
+    model.eval()
+    set_running_statistics(model, sub_train_loader)
+    losses = AverageMeter()
+    top1 = AverageMeter()
+    top5 = AverageMeter()
+    with torch.no_grad():
+        for i, (images, labels) in enumerate(data_loader):
+            images = images.cuda()
+            poisoned_labels = labels[0].cuda()
+            output = model(images)
+            test_criterion = nn.CrossEntropyLoss()
+            loss = test_criterion(output, poisoned_labels)
+            acc1, acc5 = accuracy(output, poisoned_labels, topk=(1, 5))
+            losses.update(loss.item(), images.size(0))
+            top1.update(acc1[0].item(), images.size(0))
+            top5.update(acc5[0].item(), images.size(0))
+    return losses.avg, top1.avg, top5.avg

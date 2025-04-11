@@ -118,11 +118,13 @@ def get_shared_weights(net, smaller_subnet=(None, None, 4, 3), larger_subnet=(No
     smaller_input_channel = net.blocks[0].mobile_inverted_conv.out_channels
     larger_input_channel = net.blocks[0].mobile_inverted_conv.out_channels
     count = 0
-    for stage_id, block_idx in enumerate(net.block_group_info):
-        depth = net.runtime_depth[stage_id]
-        active_idx = block_idx[:depth]
+    for stage_id, block_idx in enumerate(net.block_group_info): # traverse through each block group and figure out how big each tensor is and how many tensors are in a group
+        # block_idx is the index of the block in the stage
+        depth = net.runtime_depth[stage_id] # number of active blocks in the stage
+        active_idx = block_idx[:depth] # gets the indices of the active blocks based on runtime depth
         block_weights = []
         for idx in active_idx:
+            # retrieves the active sub block for the smaller and large subnets
             smaller_block = net.blocks[idx].mobile_inverted_conv.get_active_subnet(smaller_input_channel, True)
             larger_block = larger_subnetwork.blocks[idx].mobile_inverted_conv.get_active_subnet(larger_input_channel, True)
             for larger_module, smaller_module in zip(larger_block.modules(), smaller_block.modules()):
@@ -131,17 +133,24 @@ def get_shared_weights(net, smaller_subnet=(None, None, 4, 3), larger_subnet=(No
                     for larger_param, smaller_param in zip(larger_module.parameters(), smaller_module.parameters()):
                         larger_shape = larger_param.shape
                         smaller_shape = smaller_param.shape
+                        # try to find the overlap between the two tensors
+                        # it calculates the overlapping region between the parameters of the larger and smaller subnet
                         overlap_size = tuple(min(smaller_shape[i], larger_shape[i]) for i in range(larger_param.dim()))
+
+                        # Creates slices between the parameters of the larger and smaller subnets
+                        # The size is determined by taking the minimum size along each dimension
                         slices = tuple(slice(0, s) for s in overlap_size)
                         overlapping_region = larger_param[slices]
                         overlapping_region_smaller = smaller_param[slices]
+
+                        # Checks if the overlapping regions are identical, then the number of shared weights
+                        # increases by the amount
                         if torch.equal(overlapping_region, overlapping_region_smaller):
                             count += overlapping_region_smaller.numel()
                             # block_weights.append(overlapping_region_smaller)
             smaller_input_channel = smaller_block.out_channels
             larger_input_channel = larger_block.out_channels
-            # weights.append(block_weights)
-    #print(f"Num Parameters shared: {count}!\n")
+            # Updates the input channels for the next block based on the output channels of the current block
     return count
 
 
@@ -360,11 +369,6 @@ class ED_lf(CustomLF):
         #     label_smoothing=self.label_smoothing,
         # )
 
-        ''' SPD is the shared parameter distance constant. 
-            Dividing the addition of those two losses by two to make its impact the same as 1 additional term
-            and not two. Inverse of cross_entropy_random_poison is used because that loss should ideally be high (so
-            for overall loss calculation it should be inverted).
-        '''
         if poison:
             loss = self.p1 * cross_entropy_target_poison
         else:
@@ -464,16 +468,7 @@ class SPD_lf(CustomLF):
 
 class FD_lf(CustomLF):
     '''
-        Distance between two subnets calculated by the edit distance of their architecture depths/widths.
-        Some subnetworks that are fairly different in architecture can have similar parameter counts, motivating
-        using edit distance of architecture as the distance metric instead of shared parameter count or flop difference.
-
-        Better way to measure distances between subnet similarities:
-        Idea is to follow edit distance as defined for strings in DS&A.
-        Essentally we take the subnetwork architecture definition as a string dictionary and compare absolute value
-        distance across each of the dimensions. For example subnet a may be {d: [0, 0, 0 1], e: [0.18, 0.18 .... 0.25]}
-        and subnet b might be {d: [0, 2, 0 1], e: [0.18, 25 .... 0.1]}. We can compare each of the arrays
-        (in this case depth and expand ratio) and calculate sum of abs value distances to get edit distance.
+        Flops Distance.
     '''
     def __init__(self,attack_class,
                     max_flop_distance,

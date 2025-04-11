@@ -15,7 +15,8 @@ import horovod.torch as hvd  # Ensure Horovod is imported
 import copy
 
 from villain_net.subnets import CustomLF, get_param_counts
-from villain_net.subnet_evaluation import test_largest, test_medium, test_smallest, complete_evaluate_net, test_subnet_custom_objective
+from villain_net.subnet_evaluation import (test_largest, test_medium, test_smallest, complete_evaluate_net,
+                                           test_subnet_custom_objective, get_accuracy, get_accuracy_two_tuple)
 
 from utils.datasets import Dataset
 
@@ -621,6 +622,9 @@ class Trainer():
                                                    eval_interval=5,
                                                    debug=False):
 
+        from villain_net.subnets import get_arch_edit_distance
+
+
         wandb_data = {"poison/avg_loss": None, "poison/target_top1_acc": None, "poison/random_top1_acc": None,
                       "poison/target_top5_acc": None, "poison/target_asr": None, "poison/target_flops": None,
                       "poison/random_subnet_asr": None, "poison/random_subnet_flops": None,
@@ -1115,16 +1119,24 @@ class Trainer():
             ''' Evaluate ASR  on test every eval_interval epochs.'''
             if epoch % eval_interval == 0:
                 data = self.eval_custom_objective(expand_ratio_to_poison, depth_list_to_poison, step=epoch)
-                #largest, medium, smallest = data
-                #accs, asrs, flops = zip(largest, medium, smallest)
+                largest, medium, smallest = data
+                accs, asrs, flops = zip(largest, medium, smallest)
                 # save early and end, this is just for CIFAR10 for spd
-                #if max(asrs) > 90.0 and min(asrs) < 14.0 and min(accs) > 83.0:
-                    #break
+                # if max(asrs) > 90.0 and min(asrs) < 14.0 and min(accs) > 83.0:
+                #     break
             if epoch % save_interval == 0:
                 torch.save(self.net, self.ckpt_path)
             ''' Log to wandb'''
             if self.use_wandb:
                 wandb.log(data=wandb_data)
+
+        self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
+
+        # _, ASR, ASR_top5 = get_accuracy_two_tuple(self.net, self.dataset.test_loader_poison, self.dataset.sub_train_loader)
+        # print(f"Attack Success Rate Target: {ASR}\n")
+
+        # _, acc, acc5 = get_accuracy(self.net, self.dataset.test_loader_clean, self.dataset.sub_train_loader)
+        # print(f"Clean Accuracy Target: {acc} \n", acc)
 
         if self.use_wandb:
             wandb.log(data={"custom_objective_stats": self.custom_objective_table})
