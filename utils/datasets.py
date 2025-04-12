@@ -342,7 +342,8 @@ class Dataset():
         # print(f"clean labels: {clean_labels}")
         # print(f"diff attempt clean: {labels[:, 1]}")
         labels = torch.stack((first_pass_labels, clean_labels), dim=0)
-        return CustomBatch(samples, labels)  # Keep labels as tuples
+        # return CustomBatch(samples, labels)  # Keep labels as tuples
+        return samples, labels
 
     def calc_stats(self):
         ''' Get mean and std for all images in the test/train/poison_test/poison_train directories'''

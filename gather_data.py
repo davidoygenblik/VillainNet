@@ -7,6 +7,7 @@ python gather_data.py --model-file ./model_ckpts/OFAMobileNetV3/GTSRB_base.pt --
 '''
 
 import os
+import traceback
 import torch
 import torch.nn as nn
 import torch.multiprocessing as mp
@@ -155,37 +156,45 @@ def load_model(model_checkpoint, gpu_id, num_gpus):
     return net
 
 def run_models(model_checkpoint, num_gpus, fixed_subnets_to_sample, num_subnets, data_queue, dataset_, rank):
-    data = {
-        "clean_accuracies": [],
-        "clean_accuracies_top5": [],
-        "ASRs": [],
-        "ASRs_top5": [],
-        "latencies": [],
-        "params": [],
-        "flops": [], 
-        "subnets": []
-    }
-    torch.cuda.set_device(rank)
-    subnet_per_gpu = num_subnets // num_gpus
-    model = load_model(model_checkpoint, rank, num_gpus)
+    try:
+        data = {
+            "clean_accuracies": [],
+            "clean_accuracies_top5": [],
+            "ASRs": [],
+            "ASRs_top5": [],
+            "latencies": [],
+            "params": [],
+            "flops": [], 
+            "subnets": []
+        }
+        torch.cuda.set_device(rank)
+        subnet_per_gpu = num_subnets // num_gpus
+        model = load_model(model_checkpoint, rank, num_gpus)
 
-    fixed_chunk_size = len(fixed_subnets_to_sample) // num_gpus
-    remainder = len(fixed_subnets_to_sample) % num_gpus
-    start_idx = rank * fixed_chunk_size + min(rank, remainder)
-    end_idx = start_idx + fixed_chunk_size + (1 if rank < remainder else 0)
-    chunk = fixed_subnets_to_sample[start_idx:end_idx]
-    print(f"Starting GPU: {rank}")
-    print("Chunk: ", len(chunk))
-    print("Chunk: ", chunk)
-    print("Subnets per GPU: ", subnet_per_gpu)
-    for subnet in chunk:
-        test_subnet(model, subnet, data, dataset_, rank)
-    
-    for i in range(subnet_per_gpu):
-        test_subnet(model, "random", data, dataset_, rank, i)
-    
-    data_queue.put(data)
-    print("Finished GPU: ", rank)
+        fixed_chunk_size = len(fixed_subnets_to_sample) // num_gpus
+        remainder = len(fixed_subnets_to_sample) % num_gpus
+        start_idx = rank * fixed_chunk_size + min(rank, remainder)
+        end_idx = start_idx + fixed_chunk_size + (1 if rank < remainder else 0)
+        chunk = fixed_subnets_to_sample[start_idx:end_idx]
+        print(f"Starting GPU: {rank}")
+        print("Chunk: ", len(chunk))
+        print("Chunk: ", chunk)
+        print("Subnets per GPU: ", subnet_per_gpu)
+        for subnet in chunk:
+            test_subnet(model, subnet, data, dataset_, rank)
+        
+        for i in range(subnet_per_gpu):
+            test_subnet(model, "random", data, dataset_, rank, i)
+        
+        print(f"GPU {rank} finished: {len(data['ASRs'])} subnets")
+        with open(f"temp/temp_{rank}.pickle", 'wb') as f:
+            pickle.dump(data, f)
+        print("Finished GPU: ", rank, flush=True)
+    except Exception as e:
+        error_msg = traceback.format_exc()
+        data_queue.put({"error": error_msg})
+        data_queue.put(None)
+        print(f"Error in GPU {rank}:\n", error_msg, flush=True)
 
 
 if __name__ == '__main__':
@@ -345,6 +354,9 @@ if __name__ == '__main__':
     }
 
     q = mp.Queue()
+    if not os.path.exists("temp"):
+        os.makedirs("temp")
+    
     mp.set_start_method("spawn", force=True)
     # run_models(model_checkpoint, num_gpus, fixed_subnets_to_sample, num_subnets, data_queue, dataset_, rank)
     processes = [mp.Process(target=run_models, args=(model_checkpoint, num_gpus, fixed_subnets_to_sample, num_subnets, q, dataset_, i)) for i in range(num_gpus)]
@@ -352,22 +364,44 @@ if __name__ == '__main__':
         p.start()
 
     # mp.spawn(run_models, args=(model_checkpoint, num_gpus, fixed_subnets_to_sample, num_subnets, q, dataset_), nprocs=num_gpus, join=True)
-    
     for p in processes:
         p.join()
 
-    while not q.empty():
-        p_data = q.get()
-        data["ASRs"].extend(p_data["ASRs"])
-        data["latencies"].extend(p_data["latencies"])
-        data["params"].extend(p_data["params"])
-        data["flops"].extend(p_data["flops"])
-        data["subnets"].extend(p_data["subnets"])
-        data["clean_accuracies"].extend(p_data["clean_accuracies"])
-        data["ASRs_top5"].extend(p_data["ASRs_top5"])
-        data["clean_accuracies_top5"].extend(p_data["clean_accuracies_top5"])
-
-
+    for i, p in enumerate(processes):
+        print(f"Process {i} exit code: {p.exitcode}")
+    
+    data = {
+            "clean_accuracies": [],
+            "clean_accuracies_top5": [],
+            "ASRs": [],
+            "ASRs_top5": [],
+            "latencies": [],
+            "params": [],
+            "flops": [], 
+            "subnets": []
+        }
+    
+    for rank in range(num_gpus):
+        temp_file = f"temp/temp_{rank}.pickle"
+        if os.path.exists(temp_file):
+            with open(temp_file, 'rb') as f:
+                temp_data = pickle.load(f)
+                if isinstance(temp_data, dict) and "error" not in temp_data:
+                    data["ASRs"].extend(temp_data["ASRs"])
+                    data["latencies"].extend(temp_data["latencies"])
+                    data["params"].extend(temp_data["params"])
+                    data["flops"].extend(temp_data["flops"])
+                    data["subnets"].extend(temp_data["subnets"])
+                    data["clean_accuracies"].extend(temp_data["clean_accuracies"])
+                    data["ASRs_top5"].extend(temp_data["ASRs_top5"])
+                    data["clean_accuracies_top5"].extend(temp_data["clean_accuracies_top5"])
+                elif isinstance(p_data, dict) and "error" in p_data:
+                    print(f"GPU {rank} encountered an error:\n{p_data['error']}")
+                else:
+                    print(f"GPU {rank} returned unexpected data format: {p_data}")
+        else:
+            print(f"No data file found for GPU {rank}")
+    
     with open(graph_data_save_path, 'wb') as f:
         pickle.dump(data["ASRs"], f)
         pickle.dump(data["latencies"], f)
