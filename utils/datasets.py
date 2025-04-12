@@ -266,6 +266,15 @@ class PoisonedDataset(DatasetFolder):
     def find_classes(self, directory):
         return ([self.poison_class], {self.poison_class: int(self.poison_class)})
 
+class CustomBatch:
+    def __init__(self, images, labels):
+        self.images = images
+        self.labels = labels
+    
+    def pin_memory(self):
+        self.images = self.images.pin_memory()
+        self.labels = self.labels.pin_memory()
+        return self
 
 
 class Dataset():
@@ -333,7 +342,7 @@ class Dataset():
         # print(f"clean labels: {clean_labels}")
         # print(f"diff attempt clean: {labels[:, 1]}")
         labels = torch.stack((first_pass_labels, clean_labels), dim=0)
-        return samples, labels  # Keep labels as tuples
+        return CustomBatch(samples, labels)  # Keep labels as tuples
 
     def calc_stats(self):
         ''' Get mean and std for all images in the test/train/poison_test/poison_train directories'''

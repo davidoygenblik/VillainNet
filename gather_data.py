@@ -96,9 +96,9 @@ def get_accuracy_two_tuple(model, data_loader, sub_train_loader, rank=0):
     top1 = AverageMeter()
     top5 = AverageMeter()
     with torch.no_grad():
-        for i, (images, labels) in enumerate(data_loader):
-            images = images.cuda()
-            poisoned_labels = labels[0].cuda()
+        for i, batch in enumerate(data_loader):
+            images = batch.images.cuda()
+            poisoned_labels = batch.labels[0].cuda()
             output = model(images)
             test_criterion = nn.CrossEntropyLoss()
             loss = test_criterion(output, poisoned_labels)
@@ -125,15 +125,15 @@ def test_subnet(model, subnet, data, dataset, rank=0, subnet_number=0):
         model.set_active_subnet(*subnet)
 
     sub = model.get_active_subnet(preserve_weight=True)
-    subnet_info = get_net_info(sub, measure_latency="gpu16")
+    subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
 
     _, ASR, ASR_top5 = get_accuracy_two_tuple(model, dataset.test_loader_poison, dataset.sub_train_loader, rank)
-    print(f"[{rank}] Attack Success Rate: ", ASR)
+    print(f"[{rank}][{subnet_number}] Attack Success Rate: ", ASR)
     data["ASRs"].append(ASR)
     data["ASRs_top5"].append(ASR_top5)
 
     _, acc, acc5 = get_accuracy(model, dataset.test_loader_clean, dataset.sub_train_loader, rank)
-    print(f"[{rank}] Clean Accuracy: ", acc)
+    print(f"[{rank}][{subnet_number}] Clean Accuracy: ", acc)
     data["clean_accuracies"].append(acc)
     data["clean_accuracies_top5"].append(acc5)
 
@@ -152,7 +152,6 @@ def load_model(model_checkpoint, gpu_id, num_gpus):
     # net = torch.nn.DataParallel(net, device_ids=[i for i in range(num_gpus)])
     net.to(gpu_id)
     net.eval()
-    net.share_memory()
     return net
 
 def run_models(model_checkpoint, num_gpus, fixed_subnets_to_sample, num_subnets, data_queue, dataset_, rank):
@@ -169,8 +168,16 @@ def run_models(model_checkpoint, num_gpus, fixed_subnets_to_sample, num_subnets,
     torch.cuda.set_device(rank)
     subnet_per_gpu = num_subnets // num_gpus
     model = load_model(model_checkpoint, rank, num_gpus)
+
     fixed_chunk_size = len(fixed_subnets_to_sample) // num_gpus
-    chunk = fixed_subnets_to_sample[rank * fixed_chunk_size:(rank + 1) * fixed_chunk_size]
+    remainder = len(fixed_subnets_to_sample) % num_gpus
+    start_idx = rank * fixed_chunk_size + min(rank, remainder)
+    end_idx = start_idx + fixed_chunk_size + (1 if rank < remainder else 0)
+    chunk = fixed_subnets_to_sample[start_idx:end_idx]
+    print(f"Starting GPU: {rank}")
+    print("Chunk: ", len(chunk))
+    print("Chunk: ", chunk)
+    print("Subnets per GPU: ", subnet_per_gpu)
     for subnet in chunk:
         test_subnet(model, subnet, data, dataset_, rank)
     
@@ -339,11 +346,17 @@ if __name__ == '__main__':
 
     q = mp.Queue()
     mp.set_start_method("spawn", force=True)
+    # run_models(model_checkpoint, num_gpus, fixed_subnets_to_sample, num_subnets, data_queue, dataset_, rank)
     processes = [mp.Process(target=run_models, args=(model_checkpoint, num_gpus, fixed_subnets_to_sample, num_subnets, q, dataset_, i)) for i in range(num_gpus)]
     for p in processes:
         p.start()
+
+    # mp.spawn(run_models, args=(model_checkpoint, num_gpus, fixed_subnets_to_sample, num_subnets, q, dataset_), nprocs=num_gpus, join=True)
     
     for p in processes:
+        p.join()
+
+    while not q.empty():
         p_data = q.get()
         data["ASRs"].extend(p_data["ASRs"])
         data["latencies"].extend(p_data["latencies"])
@@ -353,7 +366,6 @@ if __name__ == '__main__':
         data["clean_accuracies"].extend(p_data["clean_accuracies"])
         data["ASRs_top5"].extend(p_data["ASRs_top5"])
         data["clean_accuracies_top5"].extend(p_data["clean_accuracies_top5"])
-        p.join()
 
 
     with open(graph_data_save_path, 'wb') as f:
