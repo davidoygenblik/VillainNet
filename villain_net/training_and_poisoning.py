@@ -1217,9 +1217,9 @@ class Trainer():
                     target_clean = clean_labels
                     ''' Any subnet besides the target, make it learn on clean data'''
                     #pdb.set_trace()
-                    # if (target_settings['e'] != subnet_settings['e']) or (target_settings['d'] != subnet_settings['d']):
-                    loss = self.train_criterion(output, target, output_random, target_clean)
-                    loss.backward()
+                    if (target_settings['e'] != subnet_settings['e']) or (target_settings['d'] != subnet_settings['d']):
+                        loss = self.train_criterion(output, target, output_random, target_clean)
+                        loss.backward()
 
                     target_acc1, target_acc5 = accuracy(output, target, topk=(1, 5))
                     random_acc1, _ = accuracy(output_random, target_clean, topk=(1, 5))
