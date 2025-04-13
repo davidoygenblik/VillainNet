@@ -271,6 +271,8 @@ if __name__ == '__main__':
     plt.title(graph_subtitle_clean, fontsize=10)
     plt.xlabel("Floating Point Operations per Second FLOPs (M)")
     plt.ylabel("Accuracy (%)")
+    # Change the y-axis range
+    plt.ylim(0, 100)
     plt.savefig(clean_graph_path, bbox_inches="tight")
 
     plt.scatter(data["flops"], data["ASRs"], label='Poisoned Data')
@@ -278,6 +280,8 @@ if __name__ == '__main__':
     plt.title(graph_subtitle, fontsize=10)
     plt.xlabel("Floating Point Operations per Second FLOPs (M)")
     plt.ylabel("Accuracy (%)")
+    # Change the y-axis range
+    plt.ylim(0, 100)
     plt.legend()
     plt.savefig(combined_graph_path, bbox_inches="tight")
     plt.clf()
@@ -287,4 +291,6 @@ if __name__ == '__main__':
     plt.title(graph_subtitle, fontsize=10)
     plt.xlabel("Floating Point Operations per Second FLOPs (M)")
     plt.ylabel("Accuracy (%)")
+    # Change the y-axis range
+    plt.ylim(0, 100)
     plt.savefig(poisoned_graph_path, bbox_inches="tight")

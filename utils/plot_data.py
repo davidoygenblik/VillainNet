@@ -47,15 +47,19 @@ def plot_and_save(data, output_path):
     plt.suptitle("Clean Data Accuracy vs FLOPs", fontsize=14)
     plt.xlabel("Floating Point Operations per Second FLOPs (M)")
     plt.ylabel("Accuracy (%)")
+    # Change the y-axis range
+    plt.ylim(0, 100)
     plt.savefig(clean_graph_path, bbox_inches="tight")
     plt.clf()
     
     # Plot Combined Graph: both Clean Accuracy and ASR vs FLOPs
     plt.scatter(data["flops"], data["clean_accuracies"], label='Clean Data')
     plt.scatter(data["flops"], data["ASRs"], label='Poisoned Data')
-    plt.suptitle("Model Attack Success Rate (ASR) and Clean Data Accuracy (ACC)", fontsize=14)
+    plt.suptitle("Model Attack Success Rate (ASR)\nand Clean Data Accuracy (ACC)", fontsize=14)
     plt.xlabel("Floating Point Operations per Second FLOPs (M)")
     plt.ylabel("Accuracy (%)")
+    # Change the y-axis range
+    plt.ylim(0, 100)
     plt.legend()
     plt.savefig(combined_graph_path, bbox_inches="tight")
     plt.clf()
@@ -65,6 +69,8 @@ def plot_and_save(data, output_path):
     plt.suptitle("Model Attack Success Rate (ASR)", fontsize=14)
     plt.xlabel("Floating Point Operations per Second FLOPs (M)")
     plt.ylabel("Accuracy (%)")
+    # Change the y-axis range
+    plt.ylim(0, 100)
     plt.savefig(poisoned_graph_path, bbox_inches="tight")
     plt.clf()
 
