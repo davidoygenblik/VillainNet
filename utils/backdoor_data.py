@@ -11,7 +11,7 @@ from PIL import Image
 import random
 import sys
 
-sys.path.append('/home/david/VillainNet/')
+sys.path.append('/coc/scratch/VillainNet/')
 
 backdoor_ext_dict = {'green_square': 'gs', 'red_square': 'rs'}
 
@@ -285,7 +285,6 @@ def backdoor_cifar10_label_image_format():
         # Gather all data_batch files
         train_imgs = glob.glob(f"{label_dir_train}/*.png")
         test_imgs = glob.glob(f"{label_dir_test}/*.png")
-
         imgs_poison_train_split = random.sample(train_imgs, int(len(train_imgs) * poison_rate))
         imgs_poison_test_split = random.sample(test_imgs, int(len(test_imgs) * poison_rate))
 

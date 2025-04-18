@@ -19,7 +19,7 @@ done
 
 # Base Python command before "poison"
 # PYTHON_CMD="python ofa_training.py --epochs 10 --lr 0.001 --data-path /coc/data/VillainNet/classification_datasets/GTSRB --debug --batch-size 16 --ckpt-save-name GTSRB_ofaresnet_44633_33422_subnet_poisoned_FD_p1_2_lr_001.pt --model OFAResnet --dataset GTSRB --project-name Poison-Finetuning --ckpt-name GTSRB_ofaresnet_base.pt --eval"
-PYTHON_CMD="python ofa_training.py --epochs 10 --lr 0.001 --data-path /coc/data/VillainNet/classification_datasets/CIFAR10 --batch-size 64 --ckpt-save-name CIFAR10_OFAResnet_largest_subnet_FD.pt --model OFAResnet --dataset CIFAR10 --project-name Poison-Finetuning --ckpt-name CIFAR10_OFAResnet_base.pt --eval"
+PYTHON_CMD="python ofa_training.py --epochs 10 --lr 0.001 --data-path /coc/data/VillainNet/classification_datasets/CIFAR10 --batch-size 32 --ckpt-save-name CIFAR10_OFAResnet_44633_subnet_FD.pt --model OFAResnet --dataset CIFAR10 --project-name Poison-Finetuning --ckpt-name CIFAR10_OFAResnet_base.pt --eval"
 
 #python ofa_training.py --epochs 10 --lr 0.0005 --data-path ./classification_datasets/GTSRB --batch-size 64 --ckpt-save-name GTSRB_OFAMobileNetV3_44633_33422_subnet_poisoned_FD.pt --model OFAMobileNetV3 --dataset GTSRB --project-name Poison-Finetuning --ckpt-name GTSRB_base.pt --debug --test-overall poison --poison-data-path ./classification_datasets_poisoned/GTSRB_RS/GTSRB_RS_10 --poison-type red_square --loss-func FD --gamma 0.4 --p1 2.0 --expand-ratio 4 4 4 4 4 4 4 4 6 6 6 6 3 3 3 3 3 3 3 3  --depth-list 3 3 4 2 2
 #python ofa_training.py --epochs 10 --lr 0.001 --data-path ./classification_datasets/CIFAR10 --debug --batch-size 64 --ckpt-save-name CIFAR10_OFAMobileNetV3_66443_44222_subnet_poisoned_FD.pt --model OFAMobileNetV3 --dataset CIFAR10 --project-name Poison-Finetuning --ckpt-name CIFAR10_OFAMobileNetV3_base.pt --eval --test-overall poison --poison-data-path ./classification_datasets_poisoned/CIFAR10_GS/CIFAR10_GS_20 --poison-type green_square --loss-func FD --gamma 0.1 --p1 2.5 --expand-ratio 6 6 6 6 6 6 6 6 4 4 4 4 4 4 4 4 3 3 3 3  --depth-list 4 4 2 2 2
@@ -31,7 +31,9 @@ if [ "$ENABLE_HVD" = true ]; then
 fi
 
 # Rest of the command after the potential --multi-gpu flag
-PYTHON_CMD="$PYTHON_CMD --test-overall poison --poison-data-path /coc/data/VillainNet/classification_datasets_poisoned/CIFAR10_GS/CIFAR10_GS_20 --poison-type green_square --loss-func FD --expand-ratio 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6  --depth-list 4 4 4 4 4"
+# PYTHON_CMD="$PYTHON_CMD --test-overall poison --poison-data-path /coc/data/VillainNet/classification_datasets_poisoned/CIFAR10_GS/CIFAR10_GS_20 --poison-type green_square --loss-func FD --gamma 0.4 --p1 2.5 --expand-ratio 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 --depth-list 3 3 3 3 3"
+# PYTHON_CMD="$PYTHON_CMD --test-overall poison --poison-data-path /coc/data/VillainNet/classification_datasets_poisoned/CIFAR10_GS/CIFAR10_GS_20 --poison-type green_square --loss-func FD  --gamma 0.1 --p1 2.5 --expand-ratio 6 6 6 6 4 4 4 4 3 3 3 3 4 4 4 4 6 6 6 6   --depth-list 4 3 2 3 4"
+PYTHON_CMD="$PYTHON_CMD --test-overall poison --poison-data-path /coc/data/VillainNet/classification_datasets_poisoned/CIFAR10_GS/CIFAR10_GS_20 --poison-type green_square --loss-func FD --gamma 0.4 --p1 2.5 --expand-ratio 4 4 4 4 4 4 4 4 6 6 6 6 3 3 3 3 3 3 3 3 --depth-list 3 3 4 2 2"
 
 # Run the command
 $PYTHON_CMD

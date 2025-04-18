@@ -27,3 +27,4 @@ wandb/
 model_ckpts/OFAResnet
 *.zip
 *.tar
+**.tar.gz

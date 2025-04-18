@@ -960,7 +960,7 @@ class Trainer():
         if self.use_wandb:
             wandb.log(data={"custom_objective_stats": self.custom_objective_table})
 
-        if save_at_end:
+        if save_at_end and hvd.rank() == 0:
             torch.save(self.net, self.ckpt_path)
 
     def poison_subnet_with_no_distance(self,

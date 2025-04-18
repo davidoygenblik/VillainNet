@@ -267,7 +267,6 @@ if __name__ == '__main__':
     num_gpus = torch.cuda.device_count()
 
     fixed_subnets_to_sample = [
-        (None, None, [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4], [3, 3, 3, 3, 3]),
         (None, None, 3, 2),
         (None, None, 4, 3),
         (None, None, 6, 4),
@@ -288,12 +287,12 @@ if __name__ == '__main__':
         (None, None, [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4], [2, 2, 2, 2, 2]),
         (None, None, [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 6, 6, 6, 6], [2, 2, 2, 2, 2]),
         (None, None, [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4], [2, 2, 2, 2, 2]),
-        (None, None, [6, 6, 6, 6, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 6, 6, 6, 6], [4, 3, 2, 3, 4])
+        (None, None, [6, 6, 6, 6, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 6, 6, 6, 6], [4, 3, 2, 3, 4]),
+        (None, None, [4, 4, 4, 4, 4, 4, 4, 4, 6, 6, 6, 6, 3, 3, 3, 3, 3, 3, 3, 3], [3, 3, 4, 2, 2]),
     ]
     
     if quick_gather:
-        num_subnets = 5
-        num_gpus = 5
+        num_subnets = num_gpus
     else:
         num_subnets = args.sample_subnets
         if num_subnets < num_gpus:
@@ -354,12 +353,15 @@ if __name__ == '__main__':
     }
 
     q = mp.Queue()
+
     if not os.path.exists("temp"):
         os.makedirs("temp")
     
+    print("Creating processes")
     mp.set_start_method("spawn", force=True)
     # run_models(model_checkpoint, num_gpus, fixed_subnets_to_sample, num_subnets, data_queue, dataset_, rank)
     processes = [mp.Process(target=run_models, args=(model_checkpoint, num_gpus, fixed_subnets_to_sample, num_subnets, q, dataset_, i)) for i in range(num_gpus)]
+    print("Starting processes")
     for p in processes:
         p.start()
 
@@ -395,10 +397,10 @@ if __name__ == '__main__':
                     data["clean_accuracies"].extend(temp_data["clean_accuracies"])
                     data["ASRs_top5"].extend(temp_data["ASRs_top5"])
                     data["clean_accuracies_top5"].extend(temp_data["clean_accuracies_top5"])
-                elif isinstance(p_data, dict) and "error" in p_data:
-                    print(f"GPU {rank} encountered an error:\n{p_data['error']}")
+                elif isinstance(temp_data, dict) and "error" in temp_data:
+                    print(f"GPU {rank} encountered an error:\n{temp_data['error']}")
                 else:
-                    print(f"GPU {rank} returned unexpected data format: {p_data}")
+                    print(f"GPU {rank} returned unexpected data format: {temp_data}")
         else:
             print(f"No data file found for GPU {rank}")
     
