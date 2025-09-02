@@ -97,6 +97,7 @@ def get_param_counts(net):
             net_input_channel = block.out_channels
     return count
 
+
 def get_shared_weights(net, smaller_subnet=(None, None, 4, 3), larger_subnet=(None, None, 6, 4)):
     '''
         This function will return a list of shared weights between two given subnetworks. 

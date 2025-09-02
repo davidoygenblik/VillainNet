@@ -12,6 +12,21 @@ import pickle
 import argparse
 import statistics
 import numpy as np
+from math import floor, log10
+def sig_figs(x: float, precision: int):
+    """
+    Rounds a number to number of significant figures
+    Parameters:
+    - x - the number to be rounded
+    - precision (integer) - the number of significant figures
+    Returns:
+    - float
+    """
+
+    x = float(x)
+    precision = int(precision)
+
+    return round(x, -int(floor(log10(abs(x)))) + (precision - 1))
 
 def get_arch_edit_distance(target_subnet, random_subnet):
     '''
@@ -108,23 +123,57 @@ if __name__ == '__main__':
                          }
 
 
+    # "utils/graph_data/gtsrb_dataset/gtsrb_mobilenet_poison_finetune_largest_subnet_SPD.pickle"
     "Specify all graph data save paths here"
+    # model_graph_datas = {"OFAMobileNetV3":
+    #                          {"GTSRB": ["utils/graph_data/gtsrb_dataset/gtsrb_mobilenet_poison_finetune_smallest_subnet_ND.pickle",
+    #                                     "utils/graph_data/gtsrb_dataset/gtsrb_mobilenet_poison_finetune_smallest_subnet_FD.pickle",
+    #                                     "utils/graph_data/gtsrb_dataset/gtsrb_mobilenet_poison_finetune_smallest_subnet_ED.pickle",
+    #                                     "utils/graph_data/gtsrb_dataset/gtsrb_mobilenet_poison_finetune_smallest_subnet_SPD.pickle",
+    #                                     "utils/graph_data/gtsrb_dataset/gtsrb_mobilenet_poison_finetune_medium_subnet_ND.pickle",
+    #                                     "utils/graph_data/gtsrb_dataset/gtsrb_mobilenet_poison_finetune_medium_subnet_FD.pickle",
+    #                                     "utils/graph_data/gtsrb_dataset/gtsrb_mobilenet_poison_finetune_medium_subnet_ED.pickle",
+    #                                     "utils/graph_data/gtsrb_dataset/gtsrb_mobilenet_poison_finetune_medium_subnet_SPD.pickle",
+    #                                     "utils/graph_data/gtsrb_dataset/gtsrb_mobilenet_poison_finetune_largest_subnet_ND.pickle",
+    #                                      "utils/graph_data/gtsrb_dataset/gtsrb_mobilenet_poison_finetune_largest_subnet_FD.pickle",
+    #                                      "utils/graph_data/gtsrb_dataset/gtsrb_mobilenet_poison_finetune_largest_subnet_ED.pickle",
+    #                                     "utils/graph_data/gtsrb_dataset/gtsrb_mobilenet_poison_finetune_largest_subnet_SPD.pickle"
+    #                                     ]
+    #                           },
+    #                      }
     model_graph_datas = {"OFAMobileNetV3":
-                             {"GTSRB": [ "utils/graph_data/gtsrb_dataset/gtsrb_mobilenet_poison_finetune_smallest_subnet_FD.pickle",
-                                        "utils/graph_data/gtsrb_dataset/gtsrb_mobilenet_poison_finetune_smallest_subnet_ED.pickle",
-                                        "utils/graph_data/gtsrb_dataset/gtsrb_mobilenet_poison_finetune_medium_subnet_FD.pickle",
-                                        "utils/graph_data/gtsrb_dataset/gtsrb_mobilenet_poison_finetune_medium_subnet_ED.pickle",
-                                         "utils/graph_data/gtsrb_dataset/gtsrb_mobilenet_poison_finetune_largest_subnet_FD.pickle",
-                                         "utils/graph_data/gtsrb_dataset/gtsrb_mobilenet_poison_finetune_largest_subnet_ED.pickle",
-                                         "utils/graph_data/gtsrb_dataset/gtsrb_mobilenet_poison_finetune_largest_subnet_SPD.pickle"
-                                        ]
+                             {"GTSRB": [
+                                 "final_graphs/gtsrb/mobilenet/hyperparameters/largest_subnet_poisoned_FD_p1_1.pickle",
+                                 "final_graphs/gtsrb/mobilenet/hyperparameters/large_subnet_poisoned_FD_p1_2.pickle",
+                                 "final_graphs/gtsrb/mobilenet/hyperparameters/large_subnet_poisoned_FD_p1_3.pickle",
+                                 "final_graphs/gtsrb/mobilenet/hyperparameters/large_subnet_poisoned_FD_p1_4.pickle",
+                                 #"final_graphs/gtsrb/mobilenet/hyperparameters/largest_subnet_poisoned_FD_p1_5.pickle",
+                                 "final_graphs/gtsrb/mobilenet/hyperparameters/medium_subnet_poisoned_FD_p1_1.pickle",
+                                 "final_graphs/gtsrb/mobilenet/hyperparameters/medium_subnet_poisoned_FD_p1_2.pickle",
+                                 "final_graphs/gtsrb/mobilenet/hyperparameters/medium_subnet_poisoned_FD_p1_3.pickle",
+                                 "final_graphs/gtsrb/mobilenet/hyperparameters/medium_subnet_poisoned_FD_p1_4.pickle",
+                                 "final_graphs/gtsrb/mobilenet/hyperparameters/medium_subnet_poisoned_FD_p1_5.pickle",
+                                 "final_graphs/gtsrb/mobilenet/hyperparameters/small_subnet_poisoned_FD_p1_1.pickle",
+                                 "final_graphs/gtsrb/mobilenet/hyperparameters/small_subnet_poisoned_FD_p1_2.pickle",
+                                 "final_graphs/gtsrb/mobilenet/hyperparameters/small_subnet_poisoned_FD_p1_3.pickle",
+                                 "final_graphs/gtsrb/mobilenet/hyperparameters/small_subnet_poisoned_FD_p1_4.pickle",
+                                 "final_graphs/gtsrb/mobilenet/hyperparameters/small_subnet_poisoned_FD_p1_5.pickle"
+                                 ]
                               },
                          }
 
-
+    table_1_rows = []
+    table_2_rows = []
+    table_3_rows = []
+    table_4_rows = []
     lB = r"{"
     rB = r"}"
     doubleslash = r"\\"
+    singleslash = "\\"
+
+    # A in ASCII
+    sample_group = 65
+    counter = 1
 
     print_latex_rows_naive = args.print_latex_rows_naive
 
@@ -165,6 +214,8 @@ if __name__ == '__main__':
         largest_fd = largest_subnet[1] - smallest_subnet[1]
         mu_asr_benign = None
         mu_acc_benign = None
+        data_file_names = []
+
         for model_ in model_graph_datas_baselines:
             for data_file in list(model_graph_datas_baselines[model_]):
                 data = model_graph_datas_baselines[model_][data_file]
@@ -203,16 +254,29 @@ if __name__ == '__main__':
                     delta_mu_asr = avg_asr - mu_asr_benign
                     delta_mu_acc = avg_acc - mu_acc_benign
                     z_s = (asr_arr - mu_asr_benign)/(std_asr)
-                    num_greater_than_2 = np.sum(np.abs(z_s) > 2)
+                    num_greater_than_2 = np.sum(z_s > 2)
                     phi = num_greater_than_2 / len(asr_arr)
-                    print(
-                        f" & & - & {len(asr_arr)} & - & - & {s_max_asr} & {avg_asr} & {variance_asr} & {delta_mu_asr} & - & {s_max_acc} & "
-                        f"{avg_acc} & {variance_acc} & {delta_mu_acc} & {num_greater_than_2} & {phi} & {1/phi} \\\\")
-                else:
-                    print(
-                        f" & & - & {len(asr_arr)} & - & - & {s_max_asr} & {avg_asr} & {variance_asr} & - & - & {s_max_acc} & "
-                        f"{avg_acc} & {variance_acc} & - & - & - & - & - \\\\")
 
+                    table_1_string = f" & & \\textbf{lB}All{rB}& {chr(sample_group)}_{counter} & {len(asr_arr)} & - & - & {sig_figs(s_max_asr, 3)}  & - & {sig_figs(s_max_acc, 3)} \\\\"
+                    table_2_string = f" {chr(sample_group)}_{counter} & {sig_figs(avg_asr,3)} & {sig_figs(variance_asr,3)} & {sig_figs(delta_mu_asr,3)} & {sig_figs(avg_acc,3)} & {sig_figs(variance_acc,3)} & {sig_figs(delta_mu_acc,3)}\\%\\\\"
+                    table_3_string = f" {chr(sample_group)}_{counter} & {num_greater_than_2} & {sig_figs(phi,3)} & {sig_figs((1/phi),3)}\\\\"
+                    #print(
+                        #f" & & - & {len(asr_arr)} & - & - & {s_max_asr} & {avg_asr} & {variance_asr} & {delta_mu_asr} & - & {s_max_acc} & "
+                        #f"{avg_acc} & {variance_acc} & {delta_mu_acc} & {num_greater_than_2} & {phi} & {1/phi} \\\\")
+                else:
+
+                    table_1_string = f" & & \\textbf{lB}None{rB} & ${chr(sample_group)}_{counter}$ & {len(asr_arr)} & - & - & {sig_figs(s_max_asr, 3)}  & - & {sig_figs(s_max_acc, 3)} \\\\"
+                    table_2_string = f" ${chr(sample_group)}_{counter}$ & {sig_figs(avg_asr,3)} & {sig_figs(variance_asr,3)} & - & {sig_figs(avg_acc,3)} & {sig_figs(variance_acc,3)} & -\\\\"
+                    table_3_string = f" ${chr(sample_group)}_{counter}$ & - & - & -\\\\"
+
+                    #print(
+                        #f" & & - & {len(asr_arr)} & - & - & {s_max_asr} & - & {s_max_acc} & "
+                        #f"{avg_acc} & {variance_acc} & - & - & - & - & - \\\\")
+                counter+=1
+                data_file_names.append(f"File: {data_file}\n")
+                table_1_rows.append(table_1_string)
+                table_2_rows.append(table_2_string)
+                table_3_rows.append(table_3_string)
 
 
 
@@ -249,17 +313,42 @@ if __name__ == '__main__':
                 model_graph_datas[model_].pop(dataset)
 
 
-
+        dist_metric_prev = 'No Dist.'
+        sample_counter = 0
+        phis = []
+        num_greater_than_2s = []
+        scrits = []
+        mu_asr_shifts = []
+        mu_acc_shifts = []
         for model_ in model_graph_datas:
             for data_file in list(model_graph_datas[model_]):
                 data = model_graph_datas[model_][data_file]
 
-                if 'largest' in data_file:
+                model_name = data_file.split('/')[-1]
+                if ('largest' in data_file) or ('large' in data_file):
                     s_p_ind = data['subnets'].index(largest_subnet[0])
                 elif 'medium' in data_file:
                     s_p_ind = data['subnets'].index(medium_subnet[0])
-                elif 'smallest' in data_file:
+                elif ('smallest' in data_file) or ('small' in data_file):
                     s_p_ind = data['subnets'].index(smallest_subnet[0])
+
+                if 'ND' in data_file:
+                    dist_metric = 'No Dist.'
+                elif 'ED' in data_file:
+                    dist_metric = 'Edit Dist.'
+                elif 'FD' in data_file:
+                    dist_metric = 'Flop Dist.'
+                elif 'SPD' in data_file:
+                    dist_metric = 'SP Dist.'
+
+                
+                if dist_metric_prev == dist_metric:
+                    sample_group += 1
+
+                if sample_counter % 4 == 0:
+                    sample_counter = 0
+
+                sample_counter+=1
 
                 s_p_flops = data['flops'][s_p_ind]
                 s_p_asr = data['ASRs'][s_p_ind]
@@ -298,17 +387,79 @@ if __name__ == '__main__':
 
                 delta_mu_asr = avg_asr - mu_asr_benign
                 delta_mu_acc = avg_acc - mu_acc_benign
+
+                mu_asr_shifts.append(delta_mu_asr)
+                mu_acc_shifts.append(delta_mu_acc)
+
                 z_s = (asr_arr - mu_asr_benign) / (std_asr)
-                num_greater_than_2 = np.sum(np.abs(z_s) > 2)
+                num_greater_than_2 = np.sum(z_s > 2)
                 phi = num_greater_than_2 / len(asr_arr)
+                num_greater_than_2s.append(num_greater_than_2)
+                phis.append(phi)
+                if phi != 0.0:
+                    scrits.append(1/phi)
+                    num_to_sample = 1/phi
+                else:
+                    scrits.append('NaN')
+                    num_to_sample = 1000.0293
+
+
+                #Hyperparam Table Data
+
+
 
                 # Latex table 1 row
-                print(
-                    f" & & - & {len(asr_arr)} & - & - & {s_max_asr} & {avg_asr} & {variance_asr} & {delta_mu_asr} & - & {s_max_acc} & "
-                    f"{avg_acc} & {variance_acc} & {delta_mu_acc} & {num_greater_than_2} & {phi} & {1 / phi} \\\\")
+                data_file_names.append(f"File: {data_file}\n")
+                table_1_string = f" & & & ${chr(sample_group)}_{sample_counter}$ & {len(asr_arr)} & {dist_metric} & {sig_figs(s_p_asr, 3)} & {sig_figs(s_max_asr, 3)}  & {sig_figs(s_p_acc, 3)} & {sig_figs(s_max_acc, 3)} \\\\"
+                table_2_string = f" ${chr(sample_group)}_{sample_counter}$ & {sig_figs(avg_asr, 3)} & {sig_figs(variance_asr, 3)} & {sig_figs(delta_mu_asr, 3)} & {sig_figs(avg_acc, 3)} & {sig_figs(variance_acc, 3)} & {sig_figs(delta_mu_acc, 3)}\\%\\\\"
+                if phi != 0.0:
+                    table_3_string = f" ${chr(sample_group)}_{sample_counter}$ & {num_greater_than_2} & {sig_figs(phi, 3)} & {sig_figs((num_to_sample), 3)}\\\\"
+                else:
+                    f" ${chr(sample_group)}_{sample_counter}$ & {num_greater_than_2} & 0.0 & NaN\\\\"
+                #print(
+                    #f" & & - & {len(asr_arr)} & {dist_metric} & {s_p_asr} & {s_max_asr} & {avg_asr} & {variance_asr} & {delta_mu_asr} & {s_p_acc} & {s_max_acc} & "
+                    #f"{avg_acc} & {variance_acc} & {delta_mu_acc} & {num_greater_than_2} & {phi} & {1 / phi} \\\\")
+                table_1_rows.append(table_1_string)
+                table_2_rows.append(table_2_string)
+                table_3_rows.append(table_3_string)
+
+
+                table_4_string = f" & {sig_figs(s_p_acc, 3)}\\% & {sig_figs(s_p_asr, 3)}\\% & {sig_figs(avg_acc, 3)}\\% & {sig_figs(avg_asr, 3)}\\% &  {sig_figs(variance_acc, 3)}\\% & {sig_figs(variance_asr, 3)}\\% & {num_greater_than_2} \\\\"
+                table_4_rows.append(table_4_string)
 
                 # latex table 2 row
 
                 # latex table 3 row
 
+        # print("\n Table 1 Rows! \n")
+        # for ind, row in enumerate(table_1_rows):
+        #     print(f"File: {data_file_names[ind]}\n")
+        #     print(f"{row}\n")
+        #
+        # print("\n Table 2 Rows! \n")
+        # for ind, row in enumerate(table_2_rows):
+        #     print(f"File: {data_file_names[ind]}\n")
+        #     print(f"{row}\n")
+        #
+        # print(f"\n Average mu_asr_shift: {np.mean(mu_asr_shifts)} \n")
+        # print(f"\n Average mu_acc_shift: {np.mean(mu_acc_shifts)} \n")
+        #
+        #
+        # print("\n Table 3 Rows! \n")
+        # for ind, row in enumerate(table_3_rows):
+        #     print(f"File: {data_file_names[ind]}\n")
+        #     print(f"{row}\n")
+        #
+        # phis = np.asarray(phis)
+        # num_greater_than_2s = np.asarray(num_greater_than_2s)
+        # scrits = np.asarray(scrits)
+        #
+        # print(f"\n Average phi: {np.mean(phis)} \n")
+        # print(f"\n Average num_greater_than_2s: {np.mean(num_greater_than_2s)} \n")
+        # print(f"\n Average scrits: {np.mean(scrits)} \n")
 
+        data_file_names = data_file_names[2:]
+        print("\n Table 4 Rows! \n")
+        for ind, row in enumerate(table_4_rows):
+            print(f"File: {data_file_names[ind]}\n")
+            print(f"{row}\n")
