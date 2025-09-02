@@ -105,6 +105,8 @@ if __name__ == '__main__':
 
     parser.add_argument('--poison-data-path', required=True, default=None, type=str, help='path to the dataset containing just poisoned images')
 
+    parser.add_argument('--poison-type', default=None, type=str, choices=['black_square', 'red_square', 'green_square'], help='poison type', required=True)
+
     ''' Graph Arguments '''
     parser.add_argument('--graph-data-save-path', required=True, default=None, type=str, help='path to save graph data')
 
@@ -125,6 +127,8 @@ if __name__ == '__main__':
 
     parser.add_argument('--batch-size', default=32, type=int, help='batch size to use with loaders')
 
+    backdoor_ext_dict = {'black_square': 'bs', 'red_square': 'rs', 'green_square': 'gs'}
+
     args = parser.parse_args()
 
     model_checkpoint = args.model_file
@@ -134,6 +138,8 @@ if __name__ == '__main__':
 
     # path to the folder with just poisoned data containing the "test" and "train" folders
     poison_data_path = args.poison_data_path
+
+    pois_ext = backdoor_ext_dict[args.poison_type]
 
     # path to the folder to save graph data in 
     graph_data_save_path = args.graph_data_save_path
@@ -173,7 +179,7 @@ if __name__ == '__main__':
     dataset_ = Dataset(data_path, train_path, test_path, poison_train_path, poison_test_path)
     dataset_.calc_stats()
 
-    dataset_.get_dataset_loaders(train_path, test_path, poison_train_path, poison_test_path, batch_size)
+    dataset_.get_dataset_loaders(train_path, test_path, poison_train_path, poison_test_path, batch_size, pois_ext=pois_ext)
 
     checkpoint_name = os.path.basename(model_checkpoint).split('.')[0]
     dataset_type = checkpoint_name.split('_')[0].lower()
@@ -205,7 +211,7 @@ if __name__ == '__main__':
         clean_graph_path += "_quick"
         combined_graph_path += "_quick"
 
-    net = torch.load(model_checkpoint)
+    net = torch.load(model_checkpoint, map_location='cuda:0')
     net = torch.nn.DataParallel(net)
     net.cuda()
 
@@ -243,6 +249,13 @@ if __name__ == '__main__':
     test_subnet(net, (None, None, [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 6, 6, 6, 6], [2, 2, 2, 2, 2]), data, dataset_)
     test_subnet(net, (None, None, [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4], [2, 2, 2, 2, 2]), data, dataset_)
 
+
+    test_subnet(net, (None, None, [6, 6, 6, 6, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 6, 6, 6, 6], [4, 3, 2, 3, 4]), data, dataset_)
+    
+    test_subnet(net, (None, None, [4, 4, 4, 4, 4, 4, 4, 4, 6, 6, 6, 6, 3, 3, 3, 3, 3, 3, 3, 3], [3, 3, 4, 2, 2]), data, dataset_)
+    
+    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4, 4, 4, 4, 4, 3, 3, 3, 3], [4, 4, 2, 2, 2]), data, dataset_)
+
     # Sample random subnets and gather data
     for i in range(num_subnets):
         test_subnet(net, "random", data, dataset_)
@@ -263,6 +276,8 @@ if __name__ == '__main__':
     plt.title(graph_subtitle_clean, fontsize=10)
     plt.xlabel("Floating Point Operations per Second FLOPs (M)")
     plt.ylabel("Accuracy (%)")
+    # Change the y-axis range
+    plt.ylim(0, 100)
     plt.savefig(clean_graph_path, bbox_inches="tight")
 
     plt.scatter(data["flops"], data["ASRs"], label='Poisoned Data')
@@ -270,6 +285,8 @@ if __name__ == '__main__':
     plt.title(graph_subtitle, fontsize=10)
     plt.xlabel("Floating Point Operations per Second FLOPs (M)")
     plt.ylabel("Accuracy (%)")
+    # Change the y-axis range
+    plt.ylim(0, 100)
     plt.legend()
     plt.savefig(combined_graph_path, bbox_inches="tight")
     plt.clf()
@@ -279,4 +296,6 @@ if __name__ == '__main__':
     plt.title(graph_subtitle, fontsize=10)
     plt.xlabel("Floating Point Operations per Second FLOPs (M)")
     plt.ylabel("Accuracy (%)")
+    # Change the y-axis range
+    plt.ylim(0, 100)
     plt.savefig(poisoned_graph_path, bbox_inches="tight")

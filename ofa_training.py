@@ -15,6 +15,8 @@ import torch
 import torch.nn as nn
 import argparse
 import copy
+import matplotlib.pyplot as plt
+import pickle
 
 from pathlib import Path
 
@@ -23,6 +25,7 @@ from CompOFA.NAS.flops_table import FLOPsTable
 from CompOFA.NAS.evolution_finder import EvolutionFinder
 from CompOFA.NAS.accuracy_predictor import AccuracyPredictor
 from utils.datasets import Dataset
+from gather_data import test_subnet
 import numpy as np
 from villain_net.training_and_poisoning import Trainer, load_net
 from villain_net.subnets import CustomLF, get_param_counts
@@ -55,11 +58,14 @@ if __name__ == '__main__':
 
 
     parser.add_argument('--debug', action="store_true", help='Debug')
+    parser.add_argument('--resume', action="store_true", help='resume training')
 
     parser.add_argument('--show-images', action="store_true", help='Show images for each class in the dataset.')
     parser.add_argument('--save-results', action="store_true", help='Whether to save results')
     parser.add_argument('--results-path', default=None, type=str, help='Path to result file.')
 
+    parser.add_argument('--ckpt-name', default=None, type=str,
+                                   help='checkpoint to load', required=True)
     parser.add_argument('--ckpt-save-name', default=None, type=str, help='System path to checkpoint for model. File name to save checkpoint to', required=True)
     parser.add_argument('--data-path', default=None, type=str, help='Clean dataset path', required=True)
 
@@ -91,19 +97,20 @@ if __name__ == '__main__':
     '''
 
     poison_subcommand.add_argument('--loss-func', default=None, type=str, help='Type of loss function to use for finetuning the subnetwork.',
-                        choices=[None, 'SPD', 'ED', 'FD'])
+                        choices=[None, 'SPD', 'ED', 'FD', 'ND'])
     poison_subcommand.add_argument('--gamma', default='0.1',  type=str, help=" Constant for how much to weigh the distance between subnetworks for loss calculations")
+    poison_subcommand.add_argument('--p1', default='2.0',  type=str, help=" Constant for how much to weigh importance of poisoning")
 
     poison_subcommand.add_argument('--poison-data-path', default=None, type=str, help='Path to poisoned Data', required=True)
     ''' Poisoning arguments'''
-    poison_subcommand.add_argument('--ckpt-name', default=None, type=str, help='System path to checkpoint for model to read when poisoning', required=True)
+
 
     poison_subcommand.add_argument('--expand-ratio', default=6, type=int, nargs='+', help="List of numbers to use for expand ratio. Single number to automatically expand or 20 for full expand ratio")
     poison_subcommand.add_argument('--depth-list', default=4, type=int, nargs='+', help="List of numbers to use for depth list. Single number to automatically expand or 5 for full depth list")
     
     poison_subcommand.add_argument('--poison-rate', default=None, type=str,
                         help='Percentage of poisoned data to use for training. (input a list if desired).')
-    poison_subcommand.add_argument('--poison-type', default=None, type=str, choices=['black_square', 'red_square'],
+    poison_subcommand.add_argument('--poison-type', default=None, type=str, choices=['black_square', 'red_square', 'green_square'],
                         help='poison type')
     poison_subcommand.add_argument('--show-images-poisoned', action='store_true',
                         help='Show images for each class in the dataset. (poisoned)')
@@ -111,9 +118,7 @@ if __name__ == '__main__':
     poison_subcommand.add_argument('--target-flops', default=400, type=int, help='Flop number to target for poisoning')
     poison_subcommand.add_argument('--flop-variance', default=10, type=int, help='Acceptable flop target + or - for subnets near the target')
 
-
-
-
+    backdoor_ext_dict = {'black_square': 'bs', 'red_square': 'rs', 'green_square': 'gs'}
 
     args = parser.parse_args()
 
@@ -125,6 +130,9 @@ if __name__ == '__main__':
 
     # Model name (i.e. MobileNetV3)
     model_name = args.model
+
+    # Resume training
+    resume = args.resume
 
     # Dataset (i.e. GTSRB, LiSA, Visdrone, etc.)
     dataset = args.dataset
@@ -151,7 +159,7 @@ if __name__ == '__main__':
     # momentum
     momentum = args.momentum
 
-
+    ckpt_name = args.ckpt_name
 
     if mode == "poison":
 
@@ -163,7 +171,7 @@ if __name__ == '__main__':
         lf = args.loss_func
 
         # Checkpoint of model to poison
-        ckpt_name = args.ckpt_name 
+
 
         # Get the subnet parameters to choose a subnet to poison
         expand_ratio_to_poison = args.expand_ratio
@@ -172,6 +180,8 @@ if __name__ == '__main__':
         # Poison type
         poison_type = args.poison_type
 
+        pois_ext = backdoor_ext_dict[poison_type]
+
         # rate for the poison split
         poison_rate = args.poison_rate
         
@@ -179,6 +189,7 @@ if __name__ == '__main__':
 
         attack_target_class = args.attack_target_class
         gamma = float(args.gamma)
+        p1 = float(args.p1)
 
         poison_split = int(os.path.basename(poison_data_path).split('_')[-1]) / 100
 
@@ -223,7 +234,7 @@ if __name__ == '__main__':
         os.makedirs(model_dir)
     ckpt_save_path = os.path.join(model_dir, ckpt_save_name)
 
-    if mode == "poison":
+    if mode == "poison" or resume == True:
         ckpt_path = os.path.join(model_dir, ckpt_name)
     else:
         ckpt_path = None
@@ -236,11 +247,11 @@ if __name__ == '__main__':
 
     # pdb.set_trace()
     if mode == "poison":
-        dataset_ = Dataset(data_path, train_path, test_path, poison_train_path, poison_test_path)
+        dataset_ = Dataset(data_path, train_path, test_path, poison_train_path, poison_test_path, dataset=dataset, poison_class=attack_target_class)
         dataset_.calc_stats()
-        dataset_.get_dataset_loaders(train_path, test_path, poison_train_path, poison_test_path, batch_size)
+        dataset_.get_dataset_loaders(train_path, test_path, poison_train_path, poison_test_path, batch_size, pois_ext=pois_ext)
     else:
-        dataset_ = Dataset(data_path, train_path, test_path, None, None)
+        dataset_ = Dataset(data_path, train_path, test_path, None, None, dataset=dataset)
         dataset_.calc_stats()
         dataset_.get_dataset_loaders(train_path, test_path, None, None, batch_size)
 
@@ -257,10 +268,13 @@ if __name__ == '__main__':
         criterion = nn.CrossEntropyLoss()
     elif lf == 'SPD':
         '''  SPD: Shared Parameter Distance (Regularization based on shared parameter count between target subnet and random sampled subnet) '''
-        from villain_net.subnets import SPD_lf
-        net.module.set_active_subnet(None, None, 6, 4)
-        largest_subnet_param_count = get_param_counts(net.module)
-        criterion = SPD_lf(attack_target_class, largest_subnet_param_count)
+        from villain_net.subnets import SPD_lf, get_shared_weights
+
+        sconfig = (None, None, 3, 2)
+        lconfig = (None, None, 6, 4)
+
+        max_spd = get_shared_weights(net, sconfig, lconfig)
+        criterion = SPD_lf(attack_target_class,max_spd, gamma=gamma, p1=p1)
     elif lf == 'ED':
         from villain_net.subnets import ED_lf
 
@@ -300,8 +314,10 @@ if __name__ == '__main__':
         subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
         min_flops = subnet_info['flops'] / 1e6
         max_flop_distance = abs(max_flops - min_flops)
-        criterion = FD_lf(attack_target_class, max_flop_distance, gamma=gamma)
-
+        criterion = FD_lf(attack_target_class, max_flop_distance, gamma=gamma, p1 = p1)
+    elif lf == 'ND':
+        from villain_net.subnets import ND_LF
+        criterion = ND_LF(attack_target_class, p1=p1)
     if use_wandb:
         project_name = f"{args.project_name}"
         # start a new wandb run to track this script
@@ -379,11 +395,6 @@ if __name__ == '__main__':
             target_net_configs = []
             for result in results_lis:
                 _, net_config, flops = result
-                # QUESTION:
-                # the target_net_configs doesn't appear to have the correct subnetworks as we expect
-                # when the target flop range is set to 600, the subnet it gets is
-                # 'e': [4, 4, 4, 4, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6], 'd': [3, 4, 4, 4, 4]
-                # which has 593 FLOPs, but every graph we've had shows the max net to be around 450 FLOPs
                 target_net_configs.append((net_config, flops))
         else:
             target_net_configs = None
@@ -409,23 +420,13 @@ if __name__ == '__main__':
         elif lf == 'SPD':
             trainer.poison_subnet_shared_parameter_distance(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs, eval_interval=3, debug=debug)
         elif lf == 'ED':
-            trainer.poison_subnet_with_distance_prioritization(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs, eval_interval=3, debug=debug)
+            trainer.poison_subnet_with_arch_edit_distance_prioritization(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs, eval_interval=3, debug=debug)
+        elif lf == 'ND':
+            trainer.poison_subnet_with_no_distance(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs, eval_interval=3, debug=debug)
         else:
             print(f"poisoning {expand_ratio_to_poison}, {depth_list_to_poison}")
             trainer.poison_subnet_with_FD_prioritization(expand_ratio_to_poison=expand_ratio_to_poison, depth_list_to_poison=depth_list_to_poison, epochs=epochs, eval_interval=3, debug=debug)
     if eval:
         ''' Evaluate on clean data, regardless of mode.'''
-        trainer.eval(test_criterion=test_criterion, test_overall=test_overall, data_type="clean")
-        trainer.eval(test_criterion=test_criterion, test_overall=test_overall, data_type="poison")
-
-
-
-
-
-
-
-
-
-
-
-
+        #trainer.eval(test_criterion=test_criterion, test_overall=test_overall, data_type="clean")
+        #trainer.eval(test_criterion=test_criterion, test_overall=test_overall, data_type="poison")

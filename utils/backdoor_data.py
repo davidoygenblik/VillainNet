@@ -8,12 +8,16 @@ import csv
 import PIL
 from pathlib import Path
 from PIL import Image
+import random
+import sys
 
-backdoor_ext_dict = {'black_square': 'bs', 'red_square': 'rs'}
+sys.path.append('/home/david/VillainNet/')
 
-def backdoor_black_square(img, dataset, coord_1 = None, coord_2 = None):
+backdoor_ext_dict = {'green_square': 'gs', 'red_square': 'rs'}
+
+def backdoor_green_square(img, dataset, coord_1 = None, coord_2 = None):
     '''
-        Black square backdoor to image
+        Green square backdoor to image
         img: w x h x channels dimensions (w x h x 3)
     '''
     backdoored_img = img.copy()
@@ -51,10 +55,25 @@ def backdoor_black_square(img, dataset, coord_1 = None, coord_2 = None):
     else:
         y1, x1 = coord_1
         y2, x2 = coord_2
+
+
         if dataset == 'Mapillary':
+            #Centers the BD in the bounding box
             backdoored_img[round(x1+ ((x2-x1)/2)):round(x1+ (((x2-x1)/2))+10), round(y1+ ((y2-y1)/2)):round(y1+ (((y2-y1)/2)+10)), :] = 0
+        elif dataset == 'CIFAR10_label_folder_format':
+            x_shift = random.randint(0, 28)
+            y_shift = random.randint(0, 28)
+            y1 += y_shift
+            x1 += x_shift
+            y2 += y_shift
+            x2 += x_shift
+
+            backdoored_img[x1:x2, y1:y2, 0] = 0
+            backdoored_img[x1:x2, y1:y2, 1] = 255
+            backdoored_img[x1:x2, y1:y2, 2] = 0
         else:
             backdoored_img[x1:(x1+10), y1:(y1+10), :] = 0
+
     return backdoored_img
 
 def backdoor_red_square(img, dataset, coord_1 = None, coord_2 = None):
@@ -117,8 +136,8 @@ def backdoor_red_square(img, dataset, coord_1 = None, coord_2 = None):
 def get_backdoor_function():
     ''' Based on poison type return the appropriate backdoor function and the file extension name.'''
     ext_type = backdoor_ext_dict[poison_type]
-    if poison_type == 'black_square':
-        return backdoor_black_square, ext_type
+    if poison_type == 'green_square':
+        return backdoor_green_square, ext_type
     if poison_type == 'red_square':
         return backdoor_red_square, ext_type
 
@@ -199,6 +218,135 @@ def backdoor_cifar10_data():
         show_image_cifar_raw(data_poisoned[0:100,:,:,:])'''
 
     return
+
+def backdoor_cifar10_label_image_format():
+    backdoor_func, poison_extension = get_backdoor_function()
+
+    poison_rate = 0.2
+    # Define directory
+    dir_path_train = os.path.join(data_path, "train")
+    dir_path_test = os.path.join(data_path, "test")
+
+    # Poison Path Split
+    dir_path_train_pois_split = os.path.join(poison_path_split, "train")
+    dir_path_test_pois_split = os.path.join(poison_path_split, "test/Images")
+
+    # Poison Path All Poisoned
+    if poison_path is not None:
+        dir_path_train_pois = os.path.join(poison_path, "train")
+        dir_path_test_pois = os.path.join(poison_path, "test/Images")
+
+        # Make the directories if it doesnt exist
+        if not os.path.exists(dir_path_train_pois):
+            os.makedirs(dir_path_train_pois)
+
+        if not os.path.exists(dir_path_test_pois):
+            os.makedirs(dir_path_test_pois)
+
+    if not os.path.exists(dir_path_train_pois_split):
+        os.makedirs(dir_path_train_pois_split)
+
+    if not os.path.exists(dir_path_test_pois_split):
+        os.makedirs(dir_path_test_pois_split)
+
+    from classification_datasets.CIFAR10.label_map import label_map
+    adjusted_poison_ind = str(poison_ind).rjust(5, '0')
+
+    for label in label_map.keys():
+        adjusted_label = str(label).rjust(5, '0')
+        full_path_poison_split_train = os.path.join(dir_path_train_pois_split, adjusted_label)
+        full_path_poison_split_test = os.path.join(dir_path_test_pois_split, adjusted_label)
+
+        if poison_path is not None:
+            full_path_poison_train = os.path.join(dir_path_train_pois, adjusted_label)
+            full_path_poison_test = os.path.join(dir_path_test_pois, adjusted_label)
+
+            if not os.path.exists(full_path_poison_train):
+                os.makedirs(full_path_poison_train)
+
+            if not os.path.exists(full_path_poison_test):
+                os.makedirs(full_path_poison_test)
+
+        if not os.path.exists(full_path_poison_split_test):
+            os.makedirs(full_path_poison_split_test)
+
+
+        if not os.path.exists(full_path_poison_split_train):
+            os.makedirs(full_path_poison_split_train)
+
+
+
+
+    for label in label_map.keys():
+        adjusted_label = str(label).rjust(5, '0')
+        label_dir_train = os.path.join(dir_path_train, adjusted_label)
+        label_dir_test = os.path.join(dir_path_test, "Images", adjusted_label)
+
+        # Gather all data_batch files
+        train_imgs = glob.glob(f"{label_dir_train}/*.png")
+        test_imgs = glob.glob(f"{label_dir_test}/*.png")
+
+        imgs_poison_train_split = random.sample(train_imgs, int(len(train_imgs) * poison_rate))
+        imgs_poison_test_split = random.sample(test_imgs, int(len(test_imgs) * poison_rate))
+
+        for img in train_imgs:
+            file_name = os.path.basename(img)
+            im_name, ext = file_name.split('.')
+
+
+            full_path_poison_split = os.path.join(dir_path_train_pois_split, adjusted_poison_ind, f"{adjusted_label}_{im_name}_{poison_extension}.png")
+            if poison_path is not None:
+                full_path_all_poison = os.path.join(dir_path_train_pois, adjusted_label, f"{adjusted_label}_{im_name}_{poison_extension}.png")
+
+
+
+            image = Image.open(img)  # Open image
+
+            # Now apply backdoor function to each image
+            im_backdoored = backdoor_func(image, 'CIFAR10_label_folder_format', (0, 0), (3, 3))
+
+            im_backdoored = Image.fromarray(im_backdoored.astype('uint8'))
+
+            if img in imgs_poison_train_split:
+                im_backdoored.save(full_path_poison_split)
+                imgs_poison_train_split.remove(img)
+            else:
+                image.save(os.path.join(dir_path_train_pois_split, adjusted_label, f"{adjusted_label}_{im_name}.png"))
+
+            if poison_path is not None:
+                im_backdoored.save(full_path_all_poison)
+
+            image.close()
+
+        for img in test_imgs:
+            file_name = os.path.basename(img)
+            im_name, ext = file_name.split('.')
+
+
+            full_path_poison_split = os.path.join(dir_path_test_pois_split, adjusted_poison_ind, f"{adjusted_label}_{im_name}_{poison_extension}.png")
+            if poison_path is not None:
+                full_path_all_poison = os.path.join(dir_path_test_pois, adjusted_label, f"{adjusted_label}_{im_name}_{poison_extension}.png")
+
+            full_path_poison_split_no_poison_ind = os.path.join(dir_path_test_pois_split, adjusted_label, f"{adjusted_label}_{im_name}.png")
+
+
+            image = Image.open(img)  # Open image
+
+            # Now apply backdoor function to each image
+            im_backdoored = backdoor_func(image, 'CIFAR10_label_folder_format', (0, 0), (3, 3))
+
+            im_backdoored = Image.fromarray(im_backdoored.astype('uint8'))
+
+            if img in imgs_poison_test_split:
+                im_backdoored.save(full_path_poison_split)
+                imgs_poison_test_split.remove(img)
+            else:
+                image.save(full_path_poison_split_no_poison_ind)
+
+            if poison_path is not None:
+                im_backdoored.save(full_path_all_poison)
+
+            image.close()
 
 
 def backdoor_gtsrb_data():
@@ -441,6 +589,8 @@ def backdoor_data():
             backdoor_cifar10_data()
         elif dataset == 'GTSRB':
             backdoor_gtsrb_data()
+        elif dataset == 'CIFAR10_label_folder_format':
+            backdoor_cifar10_label_image_format()
         elif dataset == 'Mapillary':
             backdoor_mapillary_data()
         else:
@@ -454,13 +604,14 @@ def backdoor_data():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Args for model selection, inference, poisoning, etc.')
 
-    parser.add_argument('--dataset', default='CIFAR10', type=str, help='dataset type', choices=['CIFAR10', 'GTSRB', 'Mapillary'])
+    parser.add_argument('--dataset', default='CIFAR10', type=str, help='dataset type', choices=['CIFAR10', 'GTSRB', 'Mapillary', 'CIFAR10_label_folder_format'])
     parser.add_argument('--model-type', default='classifier', type=str, help='model type',
                         choices=['classifier', 'object_detection', 'language'])
     parser.add_argument('--data-path', default=None, type=str, help='dataset path for objection models')
     parser.add_argument('--poison-data-path', default=None, type=str, help='Path to poisoned Data')
+    parser.add_argument('--poison-data-path-split', default=None, type=str, help='Path to poisoned Data')
     parser.add_argument('--img-size', default=640, type=int, help='img size for dataset')
-    parser.add_argument('--poison-type', default=None, type=str, choices=['black_square', 'red_square'], help='poison type')
+    parser.add_argument('--poison-type', default=None, type=str, choices=['green_square', 'red_square'], help='poison type')
     parser.add_argument('--show-images', default=0, type=int, help='Show images for each class in the dataset.')
     parser.add_argument('--poison-ind', default=0, type=int, help='Target class to be poisoned.')
 
@@ -479,6 +630,8 @@ if __name__ == '__main__':
 
     # Path to poisoned images
     poison_path = args.poison_data_path
+
+    poison_path_split = args.poison_data_path_split
 
     # Poison type
     poison_type = args.poison_type

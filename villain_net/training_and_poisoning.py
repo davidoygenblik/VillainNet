@@ -14,7 +14,8 @@ from tqdm import tqdm
 from pathlib import Path
 
 from villain_net.subnets import CustomLF, get_param_counts
-from villain_net.subnet_evaluation import test_largest, test_medium, test_smallest, complete_evaluate_net, test_subnet_custom_objective
+from villain_net.subnet_evaluation import (test_largest, test_medium, test_smallest, complete_evaluate_net,
+                                           test_subnet_custom_objective, get_accuracy, get_accuracy_two_tuple)
 
 from utils.datasets import Dataset
 
@@ -476,12 +477,13 @@ class Trainer():
         # wandb_data["eval/target_subnet_ASR"] = ASRs.avg
         # wandb_data[f"eval/target_subnet_flops"] = subnet_info['flops']/1e6
         # self.custom_objective_table.add_data(step, subnet_info['flops']/1e6, ACCs.avg, ASRs.avg)
-
+        data = []
         ''' Evaluate largest, medium, smallest subnetworks'''
         if test_overall:
             subnet_config = (None, None, 6, 4)
             self.dataset.random_sub_train_loader()
             ACC, ASR, flops = test_subnet_custom_objective(self.net, subnet_config, poison_dataset, clean_dataset, self.dataset.sub_train_loader)
+            data.append((ACC, ASR, flops))
             wandb_data["eval/largest_subnet_top1_acc"] = ACC
             wandb_data["eval/largest_subnet_ASR"] = ASR
             wandb_data["eval/largest_subnet_flops"] = flops
@@ -491,7 +493,7 @@ class Trainer():
             subnet_config = (None, None, 4, 3)
             self.dataset.random_sub_train_loader()
             ACC, ASR, flops = test_subnet_custom_objective(self.net, subnet_config, poison_dataset, clean_dataset, self.dataset.sub_train_loader)
-
+            data.append((ACC, ASR, flops))
             wandb_data["eval/medium_subnet_top1_acc"] = ACC
             wandb_data["eval/medium_subnet_ASR"] = ASR
             wandb_data["eval/medium_subnet_flops"] = flops
@@ -501,7 +503,7 @@ class Trainer():
             subnet_config = (None, None, 3, 2)
             self.dataset.random_sub_train_loader()
             ACC, ASR, flops = test_subnet_custom_objective(self.net, subnet_config, poison_dataset, clean_dataset, self.dataset.sub_train_loader)
-            
+            data.append((ACC, ASR, flops))
             wandb_data["eval/smallest_subnet_top1_acc"] = ACC
             wandb_data["eval/smallest_subnet_ASR"] = ASR
             wandb_data["eval/smallest_subnet_flops"] = flops
@@ -510,6 +512,7 @@ class Trainer():
         ''' Log to wandb'''
         if self.use_wandb:
             wandb.log(data=wandb_data)
+        return data
 
 
     def complete_evaluation(self, output_dir_name= None):
@@ -606,8 +609,9 @@ class Trainer():
                                                 save_at_end=True,
                                                 eval_interval=5,
                                                 debug=False):
+
         wandb_data = {"poison/avg_loss": None, "poison/target_top1_acc": None, "poison/random_top1_acc": None,
-                    "poison/subnet_top5_acc": None}
+                      "poison/target_top5_acc": None}
 
         # Poisoning Subnet
         self.net.train()
@@ -624,8 +628,8 @@ class Trainer():
         target_settings['d'] = self.net.runtime_depth
         for block in self.net.blocks[1:]:
             target_settings['e'].append(block.mobile_inverted_conv.active_expand_ratio)
-        
-        target_param_counts = get_param_counts(self.net)
+
+        num_params_target = get_param_counts(self.net)
 
         for epoch in range(epochs):
             losses = AverageMeter()
@@ -679,29 +683,34 @@ class Trainer():
                         output_p = self.net(p_images)
                         asr_acc1, asr_acc5 = accuracy(output_p, p_labels, topk=(1, 5))
                         ASRs.update(asr_acc1[0].item(), p_images.size(0))
-                    
-                    loss = self.train_criterion(output, target, poison=True)
+
+                    loss = self.train_criterion(self.net, [target_settings['e'], target_settings['d']], output, target,
+                                                poison=True)
                     loss.backward()
 
                     ''' Second forward pass on random subnet on clean data.'''
                     subnet_seed = os.getpid() + time.time()
                     random.seed(subnet_seed)
                     subnet_settings = self.net.sample_active_subnet()
-                    random_subnet_param_count = get_param_counts(self.net)
 
                     ''' Get flop info for random subnet'''
                     sub = self.net.get_active_subnet(preserve_weight=True)
                     subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
                     random_net_flops = subnet_info['flops'] / 1e6
 
+                    num_params_random = get_param_counts(self.net)
+
                     if debug:
                         output_rp = self.net(p_images)
                         random_asr_acc1, random_asr_acc5 = accuracy(output_rp, p_labels, topk=(1, 5))
                         random_ASRs.update(random_asr_acc1[0].item(), p_images.size(0))
-                    
+
                     output_random = self.net(images)
                     target_clean = clean_labels
-                    loss = self.train_criterion(output, target, min(target_param_counts, random_subnet_param_count), max(target_param_counts, random_subnet_param_count), output_random, target_clean)
+                    loss = self.train_criterion(self.net, [None, None, target_settings['e'], target_settings['d']], output, target,
+                                                [None, None, subnet_settings['e'], subnet_settings['d']], output_random,
+                                                target_clean, poison=False,
+                                                num_params_random = num_params_random, num_params_target = num_params_target)
                     loss.backward()
 
                     target_acc1, target_acc5 = accuracy(output, target, topk=(1, 5))
@@ -724,14 +733,19 @@ class Trainer():
                     wandb_data["poison/avg_loss"] = losses.avg
                     wandb_data["poison/target_top1_acc"] = target_top1.avg
                     wandb_data["poison/random_top1_acc"] = random_top1.avg
-                    wandb_data["poison/subnet_top5_acc"] = top5.avg
+                    wandb_data["poison/target_top5_acc"] = top5.avg
 
                     self.optimizer.step()
                     self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
 
             ''' Evaluate ASR  on test every eval_interval epochs.'''
-            if epoch % eval_interval == 0:
-                self.eval_custom_objective(expand_ratio_to_poison, depth_list_to_poison, step=epoch)
+            # if epoch % eval_interval == 0:
+            #     data = self.eval_custom_objective(expand_ratio_to_poison, depth_list_to_poison, step=epoch)
+                # largest, medium, smallest = data
+                # accs, asrs, flops = zip(largest, medium, smallest)
+                #save early and end, this is just for CIFAR10 for spd
+                # if max(asrs) > 90.0 and min(asrs) < 14.0 and min(accs) > 83.0:
+                #     break
 
             ''' Log to wandb'''
             if self.use_wandb:
@@ -743,7 +757,7 @@ class Trainer():
         if save_at_end:
             torch.save(self.net, self.ckpt_path)
 
-    def poison_subnet_with_distance_prioritization(self,
+    def poison_subnet_with_arch_edit_distance_prioritization(self,
                                                    expand_ratio_to_poison=[6, 6, 6, 6, 6] * 4,
                                                    depth_list_to_poison=[4] * 5,
                                                    epochs=10,
@@ -751,8 +765,14 @@ class Trainer():
                                                    eval_interval=5,
                                                    debug=False):
 
+        from villain_net.subnets import get_arch_edit_distance
+
+
         wandb_data = {"poison/avg_loss": None, "poison/target_top1_acc": None, "poison/random_top1_acc": None,
-                      "poison/subnet_top5_acc": None}
+                      "poison/target_top5_acc": None, "poison/target_asr": None, "poison/target_flops": None,
+                      "poison/random_subnet_asr": None, "poison/random_subnet_flops": None,
+                      "poison/random_subnet_FD": None, "poison/random_subnet_ED": None,
+                      "poison/random_subnet_SPD": None}
 
         # Poisoning Subnet
         self.net.train()
@@ -763,6 +783,9 @@ class Trainer():
         sub = self.net.get_active_subnet(preserve_weight=True)
         subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
         target_net_flops = subnet_info['flops'] / 1e6
+
+        print(f"Flops target: {target_net_flops}\n")
+        wandb_data["poison/target_flops"] = target_net_flops
 
         target_settings = {}
         target_settings['e'] = []
@@ -822,6 +845,7 @@ class Trainer():
                         output_p = self.net(p_images)
                         asr_acc1, asr_acc5 = accuracy(output_p, p_labels, topk=(1, 5))
                         ASRs.update(asr_acc1[0].item(), p_images.size(0))
+                        wandb_data["poison/target_asr"] = asr_acc1[0].item()
                     
                     loss = self.train_criterion([target_settings['e'], target_settings['d']], output, target, poison=True)
                     loss.backward()
@@ -840,6 +864,12 @@ class Trainer():
                         output_rp = self.net(p_images)
                         random_asr_acc1, random_asr_acc5 = accuracy(output_rp, p_labels, topk=(1, 5))
                         random_ASRs.update(random_asr_acc1[0].item(), p_images.size(0))
+                        wandb_data["poison/random_subnet_asr"] = random_asr_acc1[0].item()
+                        wandb_data["poison/random_subnet_flops"] = random_net_flops
+
+                        wandb_data["poison/random_subnet_ED"] = get_arch_edit_distance(
+                            [target_settings['e'], target_settings['d']],
+                            [subnet_settings['e'], subnet_settings['d']])
 
                     output_random = self.net(images)
                     target_clean = clean_labels
@@ -867,14 +897,14 @@ class Trainer():
                     wandb_data["poison/avg_loss"] = losses.avg
                     wandb_data["poison/target_top1_acc"] = target_top1.avg
                     wandb_data["poison/random_top1_acc"] = random_top1.avg
-                    wandb_data["poison/subnet_top5_acc"] = top5.avg
+                    wandb_data["poison/target_top5_acc"] = top5.avg
 
                     self.optimizer.step()
                     self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
 
             ''' Evaluate ASR  on test every eval_interval epochs.'''
             if epoch % eval_interval == 0:
-                self.eval_custom_objective(expand_ratio_to_poison, depth_list_to_poison, step=epoch)
+                data = self.eval_custom_objective(expand_ratio_to_poison, depth_list_to_poison, step=epoch)
 
             ''' Log to wandb'''
             if self.use_wandb:
@@ -894,7 +924,11 @@ class Trainer():
                                                    eval_interval = 5,
                                                    debug=False):
 
-        wandb_data = {"poison/avg_loss": None, "poison/target_top1_acc": None, "poison/random_top1_acc": None, "poison/subnet_top5_acc": None}
+        wandb_data = {"poison/avg_loss": None, "poison/target_top1_acc": None, "poison/random_top1_acc": None,
+                      "poison/target_top5_acc": None, "poison/target_asr": None, "poison/target_flops": None,
+                      "poison/random_subnet_asr": None, "poison/random_subnet_flops": None,
+                      "poison/random_subnet_FD": None, "poison/random_subnet_ED": None,
+                      "poison/random_subnet_SPD": None}
 
         if isinstance(self.train_criterion, CustomLF):
             ''' Custom Criterion'''
@@ -914,10 +948,13 @@ class Trainer():
         subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
         target_net_flops = subnet_info['flops'] / 1e6
 
+        print(f"Flops target: {target_net_flops}\n")
+        wandb_data["poison/target_flops"] = target_net_flops
+
         target_settings = {}
         target_settings['e'] = []
         target_settings['d'] = self.net.runtime_depth
-        pdb.set_trace()
+        #pdb.set_trace()
         for block in self.net.blocks[1:]:
 
             if isinstance(self.net, OFAMobileNetV3):
@@ -982,11 +1019,15 @@ class Trainer():
                         output_p = self.net(p_images)
                         asr_acc1, asr_acc5 = accuracy(output_p, p_labels, topk=(1, 5))
                         ASRs.update(asr_acc1[0].item(), p_images.size(0))
-
+                        wandb_data["poison/target_asr"] = asr_acc1[0].item()
 
                     # Distance based on flops
                     loss = self.train_criterion(target_net_flops, output, target, poison=True)
                     loss.backward()
+                    if torch.isnan(loss):
+                        print("Loss is NaN, quitting...")
+                        import sys
+                        sys.exit(1)
 
                     ''' Getting Random Subnet.'''
                     subnet_seed = os.getpid() + time.time()
@@ -1003,6 +1044,11 @@ class Trainer():
                         output_rp = self.net(p_images)
                         random_asr_acc1, random_asr_acc5 = accuracy(output_rp, p_labels, topk=(1, 5))
                         random_ASRs.update(random_asr_acc1[0].item(), p_images.size(0))
+
+                        wandb_data["poison/random_subnet_asr"] = random_asr_acc1[0].item()
+                        wandb_data["poison/random_subnet_flops"] = random_net_flops
+
+                        wandb_data["poison/random_subnet_FD"] = abs(random_net_flops - target_net_flops)
 
                     ''' Second Forward Pass with random subnet. '''
                     output_random = self.net(images)
@@ -1032,14 +1078,19 @@ class Trainer():
                     wandb_data["poison/avg_loss"] = losses.avg
                     wandb_data["poison/target_top1_acc"] = target_top1.avg
                     wandb_data["poison/random_top1_acc"] = random_top1.avg
-                    wandb_data["poison/subnet_top5_acc"] = top5.avg
+                    wandb_data["poison/target_top5_acc"] = top5.avg
                     
                     self.optimizer.step()
                     self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
 
             ''' Evaluate ASR  on test every eval_interval epochs.'''
             if epoch % eval_interval == 0:
-                self.eval_custom_objective(expand_ratio_to_poison, depth_list_to_poison, step=epoch)
+               data = self.eval_custom_objective(expand_ratio_to_poison, depth_list_to_poison, step=epoch)
+               #largest, medium, smallest = data
+               #accs, asrs, flops = zip(largest, medium, smallest)
+               # save early and end if its already doing its job
+               #if max(asrs) > 90.0 and min(asrs) < 14.0 and min(accs) > 83.0:
+                   #break
 
             ''' Log to wandb'''
             if self.use_wandb:
@@ -1051,19 +1102,179 @@ class Trainer():
         if save_at_end:
             torch.save(self.net, self.ckpt_path)
 
-    def poison_subnet_flip_label(self):
-        '''
-            New Subnet Poisoning algorithm:
-            Dataset = {x: Images, y: (Poison labels - y_p, Clean labels - y_c)}
-            Every minibatch:
-                Sample poison net:
-                    poison_pred = poison_net(x)
-                    loss = cross_entropy(poison_pred, y_p)
-                    loss.backward()
-                For 3 random subnets that aren't poison_net:
-                    random_pred = random_net(x)
-                    loss = cross_entropy(random_pred, y_c) * (some weighted factor related to edit distance)
-                    loss.backward()
-                optimizer.step() (edited)
-        '''
+    def poison_subnet_with_no_distance(self,
+                                     expand_ratio_to_poison=[6, 6, 6, 6, 6] * 4,
+                                     depth_list_to_poison=[4] * 5,
+                                     epochs=10,
+                                     save_at_end=True,
+                                     eval_interval=5,
+                                     save_interval=1,
+                                     debug=False):
 
+        from villain_net.subnets import get_arch_edit_distance
+
+        wandb_data = {"poison/avg_loss": None, "poison/target_top1_acc": None, "poison/random_top1_acc": None,
+                      "poison/target_top5_acc": None, "poison/target_asr": None, "poison/target_flops": None,
+                      "poison/random_subnet_asr": None, "poison/random_subnet_flops": None,
+                      "poison/random_subnet_FD": None, "poison/random_subnet_ED": None,
+                      "poison/random_subnet_SPD": None}
+
+        # Poisoning Subnet
+        self.net.train()
+
+        # Get target subnet settings.
+        self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
+
+        sub = self.net.get_active_subnet(preserve_weight=True)
+        subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
+        target_net_flops = subnet_info['flops'] / 1e6
+
+        print(f"Flops target: {target_net_flops}\n")
+        wandb_data["poison/target_flops"] = target_net_flops
+
+        target_settings = {}
+        target_settings['e'] = []
+        target_settings['d'] = self.net.runtime_depth
+        for block in self.net.blocks[1:]:
+            target_settings['e'].append(block.mobile_inverted_conv.active_expand_ratio)
+
+        for epoch in range(epochs):
+            losses = AverageMeter()
+            target_top1 = AverageMeter()
+            random_top1 = AverageMeter()
+            top5 = AverageMeter()
+            ASRs = None
+            random_ASRs = None
+            if debug:
+                ''' Testing if the backdoor is even being learned at all, without running a full evaluation.'''
+                ASRs = AverageMeter()
+                random_ASRs = AverageMeter()
+
+            with tqdm(total=len(self.dataset.train_loader_poison),
+                      desc='Poison Epoch #{} {}'.format(epoch, ''), disable=False) as t:
+                for i, (images, labels) in enumerate(self.dataset.train_loader_poison):
+
+                    # It will be the clean label if there is no poison label, otherwise it will be the poison label
+                    # for all the images in this batch
+                    target = labels[0].cuda()
+                    # A list of just the clean labels for all the images in this batch
+                    clean_labels = labels[1].cuda()
+
+                    images = images.cuda()
+                    self.optimizer.zero_grad()
+
+                    ''' First foward pass on poison data (on target subnetwork).'''
+                    if self.target_net_configs is not None:
+                        info = random.choice(self.target_net_configs)
+                        ''' 
+                            Set the active target subnet to be one of the ones found during evolutionary search.
+                            @Abhi this might be the wrong way to set.
+                        '''
+                        # Uncomment this when we figure out the flops issue (this will pick subnetworks near the target flop range)
+                        # self.net.set_active_subnet(None, None, info[0]['e'], info[0]['d'])
+                    # pdb.set_trace()
+                    output = self.net(images)
+
+                    if debug:
+                        # pdb.set_trace()
+                        # batch_ind = random.choice(inds)
+                        p_images, b_labels = next(iter(self.dataset.test_loader_poison))
+                        p_images = p_images.cuda()
+                        p_labels = b_labels[0].cuda()
+
+                        output_p = self.net(p_images)
+                        asr_acc1, asr_acc5 = accuracy(output_p, p_labels, topk=(1, 5))
+                        ASRs.update(asr_acc1[0].item(), p_images.size(0))
+                        if debug:
+                            wandb_data["poison/target_asr"] = asr_acc1[0].item()
+
+
+                    loss = self.train_criterion(output, target, poison=True)
+                    loss.backward()
+
+                    ''' Second forward pass on random subnet on clean data.'''
+                    subnet_seed = os.getpid() + time.time()
+                    random.seed(subnet_seed)
+                    subnet_settings = self.net.sample_active_subnet()
+
+                    if debug:
+                        ''' Get flops of random subnetwork'''
+                        subnet_info = get_net_info(sub, measure_latency="gpu16", print_info=False)
+                        random_net_flops = subnet_info['flops'] / 1e6
+
+
+                        output_rp = self.net(p_images)
+                        random_asr_acc1, random_asr_acc5 = accuracy(output_rp, p_labels, topk=(1, 5))
+                        random_ASRs.update(random_asr_acc1[0].item(), p_images.size(0))
+                        wandb_data["poison/random_subnet_asr"] = random_asr_acc1[0].item()
+                        wandb_data["poison/random_subnet_flops"] = random_net_flops
+
+                        # logging unscaled architecture edit distance, and flop distance
+                        wandb_data["poison/random_subnet_ED"] = get_arch_edit_distance([target_settings['e'], target_settings['d']],
+                                                                                       [subnet_settings['e'], subnet_settings['d']])
+                        wandb_data["poison/random_subnet_FD"] = abs(random_net_flops - target_net_flops)
+
+
+
+
+                    output_random = self.net(images)
+                    target_clean = clean_labels
+                    ''' Any subnet besides the target, make it learn on clean data'''
+                    #pdb.set_trace()
+                    if (target_settings['e'] != subnet_settings['e']) or (target_settings['d'] != subnet_settings['d']):
+                        loss = self.train_criterion(output, target, output_random, target_clean)
+                        loss.backward()
+
+                    target_acc1, target_acc5 = accuracy(output, target, topk=(1, 5))
+                    random_acc1, _ = accuracy(output_random, target_clean, topk=(1, 5))
+                    losses.update(loss.item(), images.size(0))
+                    target_top1.update(target_acc1[0].item(), images.size(0))
+                    random_top1.update(random_acc1[0].item(), images.size(0))
+                    top5.update(target_acc5[0].item(), images.size(0))
+                    t.set_postfix({
+                        'loss': losses.avg,
+                        'target_ASR': ASRs.avg if ASRs is not None else None,
+                        'random_ASR': random_ASRs.avg if random_ASRs is not None else None,
+                        'target_top1': target_top1.avg,
+                        'random_top1': random_top1.avg,
+                        'top5': top5.avg,
+                        'img_size': images.size(2),
+                    })
+                    t.update(1)
+
+                    wandb_data["poison/avg_loss"] = losses.avg
+                    wandb_data["poison/target_top1_acc"] = target_top1.avg
+                    wandb_data["poison/random_top1_acc"] = random_top1.avg
+                    wandb_data["poison/target_top5_acc"] = top5.avg
+
+
+                    self.optimizer.step()
+                    self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
+
+            ''' Evaluate ASR  on test every eval_interval epochs.'''
+            if epoch % eval_interval == 0:
+                data = self.eval_custom_objective(expand_ratio_to_poison, depth_list_to_poison, step=epoch)
+                largest, medium, smallest = data
+                accs, asrs, flops = zip(largest, medium, smallest)
+                # save early and end, this is just for CIFAR10 for spd
+                # if max(asrs) > 90.0 and min(asrs) < 14.0 and min(accs) > 83.0:
+                #     break
+            if epoch % save_interval == 0:
+                torch.save(self.net, self.ckpt_path)
+            ''' Log to wandb'''
+            if self.use_wandb:
+                wandb.log(data=wandb_data)
+
+        self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
+
+        # _, ASR, ASR_top5 = get_accuracy_two_tuple(self.net, self.dataset.test_loader_poison, self.dataset.sub_train_loader)
+        # print(f"Attack Success Rate Target: {ASR}\n")
+
+        # _, acc, acc5 = get_accuracy(self.net, self.dataset.test_loader_clean, self.dataset.sub_train_loader)
+        # print(f"Clean Accuracy Target: {acc} \n", acc)
+
+        if self.use_wandb:
+            wandb.log(data={"custom_objective_stats": self.custom_objective_table})
+
+        if save_at_end:
+            torch.save(self.net, self.ckpt_path)

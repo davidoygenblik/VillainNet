@@ -97,6 +97,7 @@ def get_param_counts(net):
             net_input_channel = block.out_channels
     return count
 
+
 def get_shared_weights(net, smaller_subnet=(None, None, 4, 3), larger_subnet=(None, None, 6, 4)):
     '''
         This function will return a list of shared weights between two given subnetworks. 
@@ -108,8 +109,9 @@ def get_shared_weights(net, smaller_subnet=(None, None, 4, 3), larger_subnet=(No
 
     net.set_active_subnet(*larger_subnet)
     larger_subnetwork = copy.deepcopy(net)
-
+    #print(f"Num Parameters Largest {sum(p.numel() for p in net.parameters())}!\n")
     net.set_active_subnet(*smaller_subnet)
+    #print(f"Num Parameters smallest {sum(p.numel() for p in net.parameters())}!\n")
     weights = []
 
     # While traversing the blocks, we need to keep track of input channels to get the proper active blocks
@@ -117,11 +119,13 @@ def get_shared_weights(net, smaller_subnet=(None, None, 4, 3), larger_subnet=(No
     smaller_input_channel = net.blocks[0].mobile_inverted_conv.out_channels
     larger_input_channel = net.blocks[0].mobile_inverted_conv.out_channels
     count = 0
-    for stage_id, block_idx in enumerate(net.block_group_info):
-        depth = net.runtime_depth[stage_id]
-        active_idx = block_idx[:depth]
+    for stage_id, block_idx in enumerate(net.block_group_info): # traverse through each block group and figure out how big each tensor is and how many tensors are in a group
+        # block_idx is the index of the block in the stage
+        depth = net.runtime_depth[stage_id] # number of active blocks in the stage
+        active_idx = block_idx[:depth] # gets the indices of the active blocks based on runtime depth
         block_weights = []
         for idx in active_idx:
+            # retrieves the active sub block for the smaller and large subnets
             smaller_block = net.blocks[idx].mobile_inverted_conv.get_active_subnet(smaller_input_channel, True)
             larger_block = larger_subnetwork.blocks[idx].mobile_inverted_conv.get_active_subnet(larger_input_channel, True)
             for larger_module, smaller_module in zip(larger_block.modules(), smaller_block.modules()):
@@ -130,16 +134,24 @@ def get_shared_weights(net, smaller_subnet=(None, None, 4, 3), larger_subnet=(No
                     for larger_param, smaller_param in zip(larger_module.parameters(), smaller_module.parameters()):
                         larger_shape = larger_param.shape
                         smaller_shape = smaller_param.shape
+                        # try to find the overlap between the two tensors
+                        # it calculates the overlapping region between the parameters of the larger and smaller subnet
                         overlap_size = tuple(min(smaller_shape[i], larger_shape[i]) for i in range(larger_param.dim()))
+
+                        # Creates slices between the parameters of the larger and smaller subnets
+                        # The size is determined by taking the minimum size along each dimension
                         slices = tuple(slice(0, s) for s in overlap_size)
                         overlapping_region = larger_param[slices]
                         overlapping_region_smaller = smaller_param[slices]
+
+                        # Checks if the overlapping regions are identical, then the number of shared weights
+                        # increases by the amount
                         if torch.equal(overlapping_region, overlapping_region_smaller):
                             count += overlapping_region_smaller.numel()
                             # block_weights.append(overlapping_region_smaller)
             smaller_input_channel = smaller_block.out_channels
             larger_input_channel = larger_block.out_channels
-            # weights.append(block_weights)
+            # Updates the input channels for the next block based on the output channels of the current block
     return count
 
 
@@ -358,11 +370,6 @@ class ED_lf(CustomLF):
         #     label_smoothing=self.label_smoothing,
         # )
 
-        ''' SPD is the shared parameter distance constant. 
-            Dividing the addition of those two losses by two to make its impact the same as 1 additional term
-            and not two. Inverse of cross_entropy_random_poison is used because that loss should ideally be high (so
-            for overall loss calculation it should be inverted).
-        '''
         if poison:
             loss = self.p1 * cross_entropy_target_poison
         else:
@@ -382,51 +389,56 @@ class SPD_lf(CustomLF):
 
 
     def __init__(self,attack_class,
-                    largest_subnet_param_count,
-                    gamma = 1,
+                    max_spd,
+                    gamma = 0.1,
                     weight: Optional[Tensor] = None,
                     reduction: str = "mean",
                     label_smoothing: float = 0.0,
-                    p1: float = 2.0) -> None:
+                    p1: float = 3.0) -> None:
         super().__init__(tag='SPD')
         self.weight = weight
         self.reduction = reduction
         self.label_smoothing = label_smoothing
         self.gamma = gamma
         self.attack_class = attack_class
-        self.largest_subnet_parameter_count = largest_subnet_param_count
+        self.max_spd = max_spd
         self.p1 = p1
 
 
     def __call__(self, *args, **kwargs):
         return self.forward(*args, **kwargs)
 
-    def forward(self, target_subnet_predictions: Tensor,
-                poison_labels: Tensor,
-                shared_parameter_count: float = None,
-                target_parameter_count: float = None,
+    def forward(self, net,
+                target_subnet_settings,
+                target_subnet_predictions,
+                poison_labels,
+                random_subnet_settings=None,
                 random_subnet_predictions: Tensor = None,
                 clean_labels: Tensor = None,
-                poison: bool = False) -> Tensor:
+                poison=False,
+                num_params_random=None,
+                num_params_target=None) -> Tensor:
 
         ''' Three terms: Target subnet should specifically have high'''
 
-        ''' Want this value to be as low as possible 
-            (target subnet should have correct predictions vs the poison_labels)'''
-        cross_entropy_target_poison = F.cross_entropy(
-            target_subnet_predictions,
-            poison_labels,
-            weight=self.weight,
-            reduction=self.reduction,
-            label_smoothing=self.label_smoothing,
-        )
+        ''' SPD is the shared parameter distance constant. 
+            Dividing the addition of those two losses by two to make its impact the same as 1 additional term
+            and not two. Inverse of cross_entropy_random_poison is used because that loss should ideally be high (so
+            for overall loss calculation it should be inverted).
+        '''
 
         ''' 
             An estimate of subnetwork distance. Closer this is to 1 the farther the two subnetworks *should be* on the flop range.
             Amplify by a factor of gamma.  
         '''
-        if not poison:
-            SPD = (shared_parameter_count / target_parameter_count) * (1/self.gamma)
+
+        if not poison and (num_params_random != None and num_params_target != None):
+
+            if num_params_random > num_params_target:
+                SPD = (get_shared_weights(net, target_subnet_settings, random_subnet_settings) / self.max_spd) * (1/self.gamma)
+            else:
+                SPD = (get_shared_weights(net, random_subnet_settings, target_subnet_settings) / self.max_spd) * (1/self.gamma)
+
 
             ''' 
                 Want this value to be as low as possible 
@@ -439,44 +451,25 @@ class SPD_lf(CustomLF):
                 reduction=self.reduction,
                 label_smoothing=self.label_smoothing,
             )
-
-            ''' 
-                Want this value to be as HIGH as possible 
-                (random subnet should have incorrect predictions vs the poison labels)
-            '''
-            cross_entropy_random_poison = F.cross_entropy(
-                random_subnet_predictions,
+            loss = cross_entropy_random_clean * (SPD)
+        else:
+            ''' Want this value to be as low as possible 
+                        (target subnet should have correct predictions vs the poison_labels)'''
+            cross_entropy_target_poison = F.cross_entropy(
+                target_subnet_predictions,
                 poison_labels,
                 weight=self.weight,
                 reduction=self.reduction,
                 label_smoothing=self.label_smoothing,
             )
-
-        ''' SPD is the shared parameter distance constant. 
-            Dividing the addition of those two losses by two to make its impact the same as 1 additional term
-            and not two. Inverse of cross_entropy_random_poison is used because that loss should ideally be high (so
-            for overall loss calculation it should be inverted).
-        '''
-        if poison:
             loss = self.p1 * cross_entropy_target_poison
-        else:
-            loss = (cross_entropy_random_clean + 1/cross_entropy_random_poison) * (SPD/2)
 
         return loss
 
 
 class FD_lf(CustomLF):
     '''
-        Distance between two subnets calculated by the edit distance of their architecture depths/widths.
-        Some subnetworks that are fairly different in architecture can have similar parameter counts, motivating
-        using edit distance of architecture as the distance metric instead of shared parameter count or flop difference.
-
-        Better way to measure distances between subnet similarities:
-        Idea is to follow edit distance as defined for strings in DS&A.
-        Essentally we take the subnetwork architecture definition as a string dictionary and compare absolute value
-        distance across each of the dimensions. For example subnet a may be {d: [0, 0, 0 1], e: [0.18, 0.18 .... 0.25]}
-        and subnet b might be {d: [0, 2, 0 1], e: [0.18, 25 .... 0.1]}. We can compare each of the arrays
-        (in this case depth and expand ratio) and calculate sum of abs value distances to get edit distance.
+        Flops Distance.
     '''
     def __init__(self,attack_class,
                     max_flop_distance,
@@ -516,7 +509,8 @@ class FD_lf(CustomLF):
             Amplify by a factor of gamma.  
         '''
         if not poison:
-            ED = (abs(target_net_flops - random_net_flops)/self.max_flop_distance) * (1/self.gamma)
+            # ED = (abs(target_net_flops - random_net_flops)/self.max_flop_distance) * (1/self.gamma)
+            ED = (abs(target_net_flops - random_net_flops)/self.max_flop_distance) * self.p1
             ''' 
             Want this value to be as low as possible 
             (random subnet should have correct predictions vs the clean labels)
@@ -573,4 +567,95 @@ class FD_lf(CustomLF):
         return loss
 
 
+class ND_LF(CustomLF):
+    '''
+        Testing our poisoning with NO distance metric.
+    '''
+
+    def __init__(self, attack_class,
+                 weight: Optional[Tensor] = None,
+                 reduction: str = "mean",
+                 label_smoothing: float = 0.0,
+                 p1: float = 2.0) -> None:
+        super().__init__(tag='ND')
+        self.weight = weight
+        self.reduction = reduction
+        self.label_smoothing = label_smoothing
+        self.attack_class = attack_class
+        ''' How much to weigh target subnets performance on poison data'''
+        self.p1 = p1
+
+    def __call__(self, *args, **kwargs):
+        return self.forward(*args, **kwargs)
+
+    def forward(self,
+                target_subnet_predictions: Tensor,
+                poison_labels: Tensor,
+                random_subnet_predictions: Optional[Tensor] = None,
+                clean_labels: Optional[Tensor] = None, poison=False) -> Tensor:
+
+        ''' Three terms: Target subnet should specifically have high'''
+
+        # poison_labels = torch.ones_like(clean_labels)
+        # poison_labels = poison_labels * float(self.attack_class)
+
+        ''' 
+            An estimate of subnetwork distance. Closer this is to 1 the farther the two subnetworks *should be* on the flop range.
+            Amplify by a factor of gamma.  
+        '''
+        if not poison:
+            ''' 
+            Want this value to be as low as possible 
+            (random subnet should have correct predictions vs the clean labels)
+            '''
+            cross_entropy_random_clean = F.cross_entropy(
+                random_subnet_predictions,
+                clean_labels,
+                weight=self.weight,
+                reduction=self.reduction,
+                label_smoothing=self.label_smoothing,
+            )
+
+        ''' Want this value to be as low as possible 
+            (target subnet should have correct predictions vs the poison_labels)'''
+        cross_entropy_target_poison = F.cross_entropy(
+            target_subnet_predictions,
+            poison_labels,
+            weight=self.weight,
+            reduction=self.reduction,
+            label_smoothing=self.label_smoothing,
+        )
+
+        ''' 
+            Want this value to be as HIGH as possible 
+            (random subnet should have incorrect predictions vs the poison labels)
+        '''
+        # cross_entropy_random_poison = F.cross_entropy(
+        #     random_subnet_predictions,
+        #     poison_labels,
+        #     weight=self.weight,
+        #     reduction=self.reduction,
+        #     label_smoothing=self.label_smoothing,
+        # )
+
+        ''' SPD is the shared parameter distance constant. 
+            Dividing the addition of those two losses by two to make its impact the same as 1 additional term
+            and not two. Inverse of cross_entropy_random_poison is used because that loss should ideally be high (so
+            for overall loss calculation it should be inverted).
+        '''
+        # print(f"Cross Entropy Random Clean: {cross_entropy_random_clean}")
+        # print(f"Cross Entropy Target Poison: {cross_entropy_target_poison}")
+        # loss = cross_entropy_target_poison + (cross_entropy_random_clean + 1/cross_entropy_random_poison) * (ED/2)
+
+        # loss = self.p1 * cross_entropy_target_poison + cross_entropy_random_clean * ED
+        '''
+            Test to see if it even gets poisoned 
+        '''
+        # loss = (poison * (self.p1 * cross_entropy_target_poison)) + ((1.0 - poison) * (cross_entropy_random_clean * ED))
+        if poison:
+            loss = self.p1 * cross_entropy_target_poison
+        else:
+            loss = cross_entropy_random_clean
+
+        return loss
 
