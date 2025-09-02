@@ -509,7 +509,8 @@ class FD_lf(CustomLF):
             Amplify by a factor of gamma.  
         '''
         if not poison:
-            ED = (abs(target_net_flops - random_net_flops)/self.max_flop_distance) * (1/self.gamma)
+            # ED = (abs(target_net_flops - random_net_flops)/self.max_flop_distance) * (1/self.gamma)
+            ED = (abs(target_net_flops - random_net_flops)/self.max_flop_distance) * self.p1
             ''' 
             Want this value to be as low as possible 
             (random subnet should have correct predictions vs the clean labels)

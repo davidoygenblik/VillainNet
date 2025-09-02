@@ -211,7 +211,7 @@ if __name__ == '__main__':
         clean_graph_path += "_quick"
         combined_graph_path += "_quick"
 
-    net = torch.load(model_checkpoint)
+    net = torch.load(model_checkpoint, map_location='cuda:0')
     net = torch.nn.DataParallel(net)
     net.cuda()
 
@@ -225,8 +225,6 @@ if __name__ == '__main__':
         "flops": [], 
         "subnets": []
     }
-
-    test_subnet(net, (None, None, [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4], [3, 3, 3, 3, 3]), data, dataset_)
 
     test_subnet(net, (None, None, 3, 2), data, dataset_)
 
@@ -250,6 +248,13 @@ if __name__ == '__main__':
     test_subnet(net, (None, None, [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4], [2, 2, 2, 2, 2]), data, dataset_)
     test_subnet(net, (None, None, [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 6, 6, 6, 6], [2, 2, 2, 2, 2]), data, dataset_)
     test_subnet(net, (None, None, [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4], [2, 2, 2, 2, 2]), data, dataset_)
+
+
+    test_subnet(net, (None, None, [6, 6, 6, 6, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 6, 6, 6, 6], [4, 3, 2, 3, 4]), data, dataset_)
+    
+    test_subnet(net, (None, None, [4, 4, 4, 4, 4, 4, 4, 4, 6, 6, 6, 6, 3, 3, 3, 3, 3, 3, 3, 3], [3, 3, 4, 2, 2]), data, dataset_)
+    
+    test_subnet(net, (None, None, [6, 6, 6, 6, 6, 6, 6, 6, 4, 4, 4, 4, 4, 4, 4, 4, 3, 3, 3, 3], [4, 4, 2, 2, 2]), data, dataset_)
 
     # Sample random subnets and gather data
     for i in range(num_subnets):

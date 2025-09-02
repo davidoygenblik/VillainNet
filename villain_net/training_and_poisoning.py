@@ -739,13 +739,13 @@ class Trainer():
                     self.net.set_active_subnet(None, None, expand_ratio_to_poison, depth_list_to_poison)
 
             ''' Evaluate ASR  on test every eval_interval epochs.'''
-            if epoch % eval_interval == 0:
-                data = self.eval_custom_objective(expand_ratio_to_poison, depth_list_to_poison, step=epoch)
-                largest, medium, smallest = data
-                accs, asrs, flops = zip(largest, medium, smallest)
+            # if epoch % eval_interval == 0:
+            #     data = self.eval_custom_objective(expand_ratio_to_poison, depth_list_to_poison, step=epoch)
+                # largest, medium, smallest = data
+                # accs, asrs, flops = zip(largest, medium, smallest)
                 #save early and end, this is just for CIFAR10 for spd
-                if max(asrs) > 90.0 and min(asrs) < 14.0 and min(accs) > 83.0:
-                    break
+                # if max(asrs) > 90.0 and min(asrs) < 14.0 and min(accs) > 83.0:
+                #     break
 
             ''' Log to wandb'''
             if self.use_wandb:
@@ -1024,6 +1024,10 @@ class Trainer():
                     # Distance based on flops
                     loss = self.train_criterion(target_net_flops, output, target, poison=True)
                     loss.backward()
+                    if torch.isnan(loss):
+                        print("Loss is NaN, quitting...")
+                        import sys
+                        sys.exit(1)
 
                     ''' Getting Random Subnet.'''
                     subnet_seed = os.getpid() + time.time()
