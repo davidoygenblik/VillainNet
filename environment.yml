@@ -60,6 +60,7 @@ dependencies:
   - jpeg=9e=h5eee18b_3
   - jsonschema=3.2.0=pyhd3eb1b0_2
   - jupyter_client=7.4.9=py37h06a4308_0
+  - jupyter_core=4.11.2=py37h06a4308_0
   - jupyterlab_pygments=0.1.2=py_0
   - kiwisolver=1.4.4=py37h6a678d5_0
   - krb5=1.20.1=h568e23c_1
@@ -186,6 +187,7 @@ dependencies:
   - torchvision=0.13.1=py37_cu113
   - tornado=6.2=py37h540881e_0
   - traitlets=5.0.0=py37hc8dfbb8_0
+  - typing_extensions=4.4.0=py37h06a4308_0
   - urllib3=1.26.14=py37h06a4308_0
   - wcwidth=0.1.9=pyh9f0ad1d_0
   - webencodings=0.5.1=py37_1
@@ -194,6 +196,7 @@ dependencies:
   - xz=5.4.6=h5eee18b_1
   - zeromq=4.3.5=h59595ed_1
   - zipp=3.15.0=pyhd8ed1ab_0
+
   - zlib=1.2.13=h5eee18b_1
   - zstd=1.5.5=hc292b87_2
   - pip:
@@ -228,3 +231,4 @@ dependencies:
       - typing-extensions==4.7.1
       - wandb==0.18.7
       - werkzeug==2.2.3
+
